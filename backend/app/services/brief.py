@@ -29,7 +29,14 @@ def low_stock(db: Session, merchant_id: uuid.UUID) -> list[dict]:
 
 
 def last_week_sales(db: Session, merchant_id: uuid.UUID) -> dict:
+    key = ("last_week_sales", merchant_id)
+    if key in db.info:
+        return db.info[key]
     sales = sales_summary(db, merchant_id)
+    cheapest = dict(db.execute(
+        select(SupplierQuote.product_id, func.min(SupplierQuote.unit_price))
+        .join(Product, Product.id == SupplierQuote.product_id)
+        .where(Product.merchant_id == merchant_id).group_by(SupplierQuote.product_id)).all())
     revenue = Decimal("0")
     margin = Decimal("0")
     for product in db.scalars(select(Product).where(Product.merchant_id == merchant_id)):
@@ -37,12 +44,11 @@ def last_week_sales(db: Session, merchant_id: uuid.UUID) -> dict:
         if not weeks:
             continue
         packs = weeks[-1]
-        cheapest = db.scalar(select(SupplierQuote.unit_price).where(SupplierQuote.product_id == product.id)
-                             .order_by(SupplierQuote.unit_price).limit(1))
         revenue += product.sell_price * packs
-        if cheapest is not None:
-            margin += (product.sell_price - cheapest) * packs
-    return {"revenue": money(revenue), "gross_margin": money(margin)}
+        if product.id in cheapest:
+            margin += (product.sell_price - cheapest[product.id]) * packs
+    db.info[key] = {"revenue": money(revenue), "gross_margin": money(margin)}
+    return db.info[key]
 
 
 def weekly_sales(db: Session, merchant_id: uuid.UUID) -> list[dict]:

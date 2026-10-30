@@ -84,16 +84,17 @@ def current_ctx(authorization: str | None = Header(default=None), db: Session = 
     if not authorization or not authorization.lower().startswith("bearer "):
         raise ApiError(401, "UNAUTHENTICATED", "Sign in required")
     claims = _decode(authorization.split(" ", 1)[1])
-    user = db.scalar(select(User).where(User.email == claims.get("email")))
-    if user is None:
-        raise ApiError(401, "UNAUTHENTICATED", "Unknown user")
-    query = select(MerchantMembership).where(
-        MerchantMembership.user_id == user.id, MerchantMembership.status == "ACTIVE"
-    )
+    # One round trip for user + active membership + merchant (the database may be far from the API).
+    query = (select(User, MerchantMembership, Merchant)
+             .join(MerchantMembership, MerchantMembership.user_id == User.id)
+             .join(Merchant, Merchant.id == MerchantMembership.merchant_id)
+             .where(User.email == claims.get("email"), MerchantMembership.status == "ACTIVE"))
     if claims.get("mid"):
         query = query.where(MerchantMembership.merchant_id == uuid.UUID(claims["mid"]))
-    membership = db.scalars(query).first()
-    if membership is None:
+    row = db.execute(query).first()
+    if row is None:
+        if db.scalar(select(User.id).where(User.email == claims.get("email"))) is None:
+            raise ApiError(401, "UNAUTHENTICATED", "Unknown user")
         raise ApiError(403, "FORBIDDEN", "No access to this merchant")
-    merchant = db.get(Merchant, membership.merchant_id)
+    user, membership, merchant = row
     return Ctx(user=user, merchant=merchant, role=membership.role)

@@ -48,7 +48,22 @@ def _avg_weekly(weeks: list[int]) -> Decimal:
     return (Decimal(sum(recent)) / len(recent)) if recent else Decimal("0")
 
 
+def _inventory(db: Session, merchant_id: uuid.UUID):
+    """Read-only stock snapshot, cached per request (growth screens never change stock)."""
+    key = ("growth_inventory", merchant_id)
+    if key not in db.info:
+        db.info[key] = inventory_snapshot(db, merchant_id)
+    return db.info[key]
+
+
 def _cheapest_quotes(db: Session, merchant_id: uuid.UUID) -> dict[str, Decimal]:
+    key = ("cheapest_quotes", merchant_id)
+    if key not in db.info:
+        db.info[key] = _cheapest_quotes_query(db, merchant_id)
+    return db.info[key]
+
+
+def _cheapest_quotes_query(db: Session, merchant_id: uuid.UUID) -> dict[str, Decimal]:
     rows = db.execute(select(SupplierQuote.product_id, func.min(SupplierQuote.unit_price))
                       .join(Product, Product.id == SupplierQuote.product_id)
                       .where(Product.merchant_id == merchant_id).group_by(SupplierQuote.product_id)).all()
@@ -86,16 +101,25 @@ def impact(db: Session, merchant_id: uuid.UUID) -> dict:
     under_budget = Decimal("0")
     supplier_savings = Decimal("0")
     plan_seconds: list[float] = []
+    ids = [t.id for t in tasks if t.task_type == "RESTOCK"]
+    plans_by_task: dict = defaultdict(list)
+    spend_by_task: dict = {}
+    if ids:
+        for plan in db.scalars(select(Plan).where(Plan.task_id.in_(ids)).order_by(Plan.version)):
+            plans_by_task[plan.task_id].append(plan)
+        spend_by_task = dict(db.execute(
+            select(Order.task_id, func.coalesce(func.sum(Order.total), 0))
+            .where(Order.task_id.in_(ids), Order.status.in_(("ACCEPTED", "PARTIALLY_ACCEPTED", "GOODS_RECEIVED")))
+            .group_by(Order.task_id)).all())
     for task in tasks:
-        plans = db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version)).all()
-        if plans and task.task_type == "RESTOCK":
+        plans = plans_by_task.get(task.id, [])
+        if plans:
             plan_seconds.append((plans[0].created_at - task.created_at).total_seconds())
         if task not in restocks or not plans:
             continue
         final = plans[-1]
-        spend = db.scalar(select(func.coalesce(func.sum(Order.total), 0)).where(
-            Order.task_id == task.id, Order.status.in_(("ACCEPTED", "PARTIALLY_ACCEPTED", "GOODS_RECEIVED")))) or Decimal("0")
-        under_budget += max(Decimal("0"), final.budget - Decimal(spend))
+        spend = Decimal(spend_by_task.get(task.id, 0))
+        under_budget += max(Decimal("0"), final.budget - spend)
         # Savings from choosing the cheapest valid quote vs the costliest quote seen for the same item.
         quotes = defaultdict(list)
         for q in final.payload.get("evidence", {}).get("quotes", []):
@@ -130,7 +154,7 @@ def slow_movers(db: Session, merchant_id: uuid.UUID) -> list[dict]:
     sales = sales_summary(db, merchant_id)
     cost = _cheapest_quotes(db, merchant_id)
     out = []
-    for product, inv in inventory_snapshot(db, merchant_id):
+    for product, inv in _inventory(db, merchant_id):
         weeks = sales.get(str(product.id), {}).get("weeks", [])
         if not weeks:
             continue
@@ -364,7 +388,7 @@ def update_cash_settings(db: Session, merchant: Merchant, actor: str, cash_on_ha
 
 def benchmarks(db: Session, merchant_id: uuid.UUID) -> dict:
     sales = sales_summary(db, merchant_id)
-    stock = {str(p.id): inv.usable_packs for p, inv in inventory_snapshot(db, merchant_id)}
+    stock = {str(p.id): inv.usable_packs for p, inv in _inventory(db, merchant_id)}
     rows = db.execute(select(PeerBenchmark, Product).join(Product, Product.id == PeerBenchmark.product_id)
                       .where(PeerBenchmark.merchant_id == merchant_id).order_by(Product.sort_order)).all()
     items, insights = [], []

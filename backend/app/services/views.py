@@ -134,15 +134,22 @@ def _group(state: str) -> str:
     return "IN_PROGRESS"
 
 
-def task_summary(db: Session, task: Task) -> s.TaskSummary:
-    pending = db.scalars(select(Approval).where(Approval.task_id == task.id, Approval.status == "PENDING")
-                         .order_by(Approval.created_at.desc())).first()
+def task_summary(db: Session, task: Task, prefetched: dict | None = None) -> s.TaskSummary:
+    if prefetched is not None:
+        pending = prefetched["pending"].get(task.id)
+        plan = prefetched["plans"].get(task.id)
+        invoice = prefetched["invoices"].get(task.invoice_id) if task.invoice_id else None
+    else:
+        pending = db.scalars(select(Approval).where(Approval.task_id == task.id, Approval.status == "PENDING")
+                             .order_by(Approval.created_at.desc())).first()
+        plan = (db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version.desc())).first()
+                if task.task_type == "RESTOCK" else None)
+        invoice = db.get(Invoice, task.invoice_id) if task.invoice_id else None
     amount = None
     if task.task_type == "RESTOCK":
-        plan = db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version.desc())).first()
         amount = m(plan.total) if plan else None
-    elif task.invoice_id:
-        amount = m(db.get(Invoice, task.invoice_id).amount)
+    elif invoice is not None:
+        amount = m(invoice.amount)
     return s.TaskSummary(
         id=str(task.id), task_type=task.task_type, state=task.state, title=task.title, input_text=task.input_text,
         input_channel=task.input_channel, result_note=task.result_note, amount=amount,
@@ -154,7 +161,20 @@ def task_summary(db: Session, task: Task) -> s.TaskSummary:
 def tasks(db: Session, merchant_id: uuid.UUID) -> list[s.TaskSummary]:
     rows = db.scalars(select(Task).where(Task.merchant_id == merchant_id, Task.task_type != "BRIEF")
                       .order_by(Task.updated_at.desc())).all()
-    return [task_summary(db, t) for t in rows]
+    if not rows:
+        return []
+    ids = [t.id for t in rows]
+    pending: dict = {}
+    for a in db.scalars(select(Approval).where(Approval.task_id.in_(ids), Approval.status == "PENDING")
+                        .order_by(Approval.created_at)):
+        pending[a.task_id] = a  # latest wins
+    plans: dict = {}
+    for p in db.scalars(select(Plan).where(Plan.task_id.in_(ids)).order_by(Plan.version)):
+        plans[p.task_id] = p  # highest version wins
+    invoice_ids = [t.invoice_id for t in rows if t.invoice_id]
+    invoices = {i.id: i for i in db.scalars(select(Invoice).where(Invoice.id.in_(invoice_ids)))} if invoice_ids else {}
+    prefetched = {"pending": pending, "plans": plans, "invoices": invoices}
+    return [task_summary(db, t, prefetched) for t in rows]
 
 
 def task_detail(db: Session, merchant_id: uuid.UUID, task_id: uuid.UUID) -> s.TaskDetail | None:

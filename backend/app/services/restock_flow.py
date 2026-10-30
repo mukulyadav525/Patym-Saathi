@@ -38,6 +38,14 @@ OPEN_ORDER_STATES = ("ACCEPTED", "PARTIALLY_ACCEPTED")
 # ---------- read tools (evidence) ----------
 
 def sales_summary(db: Session, merchant_id: uuid.UUID) -> dict[str, dict]:
+    # Cached on the session (one per request): screens call this several times and the DB may be far away.
+    key = ("sales_summary", merchant_id)
+    if key not in db.info:
+        db.info[key] = _sales_summary(db, merchant_id)
+    return db.info[key]
+
+
+def _sales_summary(db: Session, merchant_id: uuid.UUID) -> dict[str, dict]:
     rows = db.scalars(
         select(SalesWeekly).where(SalesWeekly.merchant_id == merchant_id).order_by(SalesWeekly.week_start)
     ).all()
