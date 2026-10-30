@@ -67,7 +67,7 @@ def build(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dic
         priorities.append({
             "kind": "STOCK", "severity": "medium",
             "title": f"{len(lows)} items low before the weekend",
-            "detail": f"{names}{'…' if len(lows) > 3 else ''}. {worst['name']}: {worst['stock']} packs vs ~{worst['avg_weekly']}/week",
+            "detail": f"{names}{' and more' if len(lows) > 3 else ''} — {worst['name']}: {worst['stock']} packs vs ~{worst['avg_weekly']}/week",
             "action": {"type": "RESTOCK", "label": "Plan restock"},
             "sources": ["Inventory records (SAMPLE)", "4-week POS sales (SAMPLE)"],
         })
