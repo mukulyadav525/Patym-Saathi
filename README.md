@@ -13,9 +13,11 @@ Android app (Expo) + web dashboard (Next.js) share one FastAPI backend and one P
 | Restock: "Weekend ke liye ₹5,000 ke andar stock arrange karo" → ₹4,650 plan (6 items, 31 packs) → approval 1 → Supplier A oil shortage → ₹4,850 re-plan via Supplier B → approval 2 → simulated orders → simulated delivery → inventory +31 packs | ✅ end-to-end, tested |
 | Dues: INV-1042 Aman Stores ₹1,200 → payment-link draft → approval → DEMO link → simulated UPI payment → signed webhook → status check → 4 fields match → PAID | ✅ end-to-end, tested |
 | Daily brief: 3 cited priorities, read-only | ✅ |
-| Task inbox, approval history, inventory, invoices, orders, audit trail, connection status, demo reset | ✅ Android + web |
-| Voice input (Sarvam STT) | Built; **needs `SARVAM_API_KEY`**, otherwise the app tells the user to type |
-| Paytm staging adapter | **Not enabled** — refuses to run without credentials (never pretends) |
+| Task inbox (approve/reject from the card), approval history, inventory, invoices, orders, payments & settlements, audit trail, connection status, demo reset | ✅ Android + web |
+| Paytm for Business home (Android): Saathi as the NEW first tile, QR/Soundbox/Card/Loan pages, profile menu (settlements, notifications, Hindi/English, approval PIN, legal) | ✅ product pages are labelled prototype screens |
+| Approval safety extras: optional 4-digit approval PIN (hashed, 5 tries → 10-min lock), renew an expired approval for the unchanged payload, read-back built from stored records | ✅ tested |
+| Voice input (Sarvam STT) and read-back audio (Bulbul) | Built; **needs `SARVAM_API_KEY`**, otherwise text input and text read-back |
+| Paytm staging adapter (Create Link, Transaction Status v3, CHECKSUMHASH callbacks via `paytmchecksum`) | **Built to staging spec, tested with recorded mocks only**; set `PAYTM_ENV=staging`, `PAYTM_MID`, `PAYTM_MERCHANT_KEY` |
 
 Safety properties enforced in backend code (see `backend/tests`): totals computed in code (Decimal), budget cap,
 approvals bound to a SHA-256 payload hash + 10-min expiry + single use, material change supersedes approval,
@@ -43,7 +45,7 @@ npm run seed        # alembic upgrade + deterministic demo data
 npm run api         # http://localhost:8000  (docs at /docs)
 npm run web         # http://localhost:3000
 npm run mobile      # Expo dev server; press a for Android, w for web preview
-npm run test:api    # 30 backend tests
+npm run test:api    # 48 backend tests
 npm run types       # regenerate shared/api-types.ts (API must be running)
 ```
 
@@ -78,6 +80,9 @@ Auth is backend-issued JWT (HS256); `SUPABASE_JWT_SECRET` is also accepted if yo
 * Secrets stay on the API. Nothing secret goes in `NEXT_PUBLIC_*` / `EXPO_PUBLIC_*`.
 
 ## Demo script (≈4 min)
+
+Full script with checklist and prepared answers: [docs/demo-script.md](docs/demo-script.md).
+Data retention, deletion and incident plan: [docs/data-and-privacy.md](docs/data-and-privacy.md).
 
 1. **Reset** (Saathi → Business tab → Reset demo data, or web → Connections).
    The app opens on the Paytm for Business home; tap the **NEW Paytm Saathi** tile to sign in.

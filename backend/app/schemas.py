@@ -31,6 +31,12 @@ class UserOut(BaseModel):
     email: str
     display_name: str
     role: str
+    has_approval_pin: bool = False
+
+
+class ApprovalPinRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=200)
+    pin: str | None = Field(default=None, pattern=r"^\d{4}$", description="null clears the PIN")
 
 
 class LoginResponse(BaseModel):

@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/approval-pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Approval Pin */
+        post: operations["set_approval_pin_api_v1_me_approval_pin_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard": {
         parameters: {
             query?: never;
@@ -205,6 +222,23 @@ export interface paths {
         put?: never;
         /** Confirm Approval */
         post: operations["confirm_approval_api_v1_approvals__approval_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tasks/{task_id}/renew-approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renew Approval */
+        post: operations["renew_approval_api_v1_tasks__task_id__renew_approval_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -487,6 +521,16 @@ export interface components {
             plan_version: number | null;
             /** Summary */
             summary: string;
+        };
+        /** ApprovalPinRequest */
+        ApprovalPinRequest: {
+            /** Password */
+            password: string;
+            /**
+             * Pin
+             * @description null clears the PIN
+             */
+            pin?: string | null;
         };
         /** AssistantRequest */
         AssistantRequest: {
@@ -1006,6 +1050,11 @@ export interface components {
             display_name: string;
             /** Role */
             role: string;
+            /**
+             * Has Approval Pin
+             * @default false
+             */
+            has_approval_pin: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -1112,6 +1161,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_approval_pin_api_v1_me_approval_pin_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalPinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimpleResult"];
                 };
             };
             /** @description Validation Error */
@@ -1397,10 +1481,44 @@ export interface operations {
             query?: never;
             header: {
                 "Idempotency-Key": string;
+                "X-Approval-Pin"?: string | null;
                 authorization?: string | null;
             };
             path: {
                 approval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_approval_api_v1_tasks__task_id__renew_approval_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: string;
             };
             cookie?: never;
         };

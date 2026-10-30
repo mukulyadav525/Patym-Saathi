@@ -20,7 +20,7 @@ export default function Connections() {
     <Screen refreshing={refreshing} onRefresh={reload}>
       <TopBar title="Connections & consent" />
       <Txt style={[ui.muted, { marginBottom: 12 }]}>
-        What Saathi can see, and whether it's real, demo or simulated. Payment data alone never reveals item sales, stock or margins.
+        What Saathi can see, and whether it’s real, demo or simulated. Payment data alone never reveals item sales, stock or margins.
       </Txt>
       {loading && !data ? <Loading /> : error && !data ? <ErrorState error={error} onRetry={reload} /> : data?.map((c) => {
         const meta = META[c.source] ?? { label: c.source, icon: "link-outline" as IconName };

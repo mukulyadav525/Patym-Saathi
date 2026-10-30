@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -232,19 +232,24 @@ export default function TaskPage() {
       </div>
 
       {pending && confirming && (
-        <ConfirmDialog task={task} onClose={() => setConfirming(false)}
+        <ConfirmDialog task={task} onClose={() => setConfirming(false)} onRenewed={setData}
           onDone={(t) => { setConfirming(false); setData(t); }} onError={(m) => { setConfirming(false); setNotice(m); void reload(); }} />
       )}
     </>
   );
 }
 
-function ConfirmDialog({ task, onClose, onDone, onError }: {
+function ConfirmDialog({ task, onClose, onDone, onError, onRenewed }: {
   task: TaskDetail; onClose: () => void; onDone: (t: TaskDetail) => void; onError: (m: string) => void;
+  onRenewed: (t: TaskDetail) => void;
 }) {
   const pending = task.approvals.find((a) => a.id === task.pending_approval_id)!;
   const plan = task.plans[task.plans.length - 1];
   const key = useRef(newKey()); // reused if this exact approval is retried, so it can't double-order
+  const { session } = useAuth();
+  const needsPin = !!session?.user.has_approval_pin;
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [left, setLeft] = useState(0);
   useEffect(() => {
@@ -254,11 +259,27 @@ function ConfirmDialog({ task, onClose, onDone, onError }: {
     return () => clearInterval(t);
   }, [pending.expires_at]);
 
+  const renew = async () => {
+    setBusy(true);
+    try {
+      onRenewed(await api.renewApproval(task.id));
+    } catch (e) {
+      onError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const approve = async () => {
     setBusy(true);
     try {
-      onDone(await api.confirm(pending.id, key.current));
+      onDone(await api.confirm(pending.id, key.current, needsPin ? pin : undefined));
     } catch (e) {
+      if (e instanceof ApiError && (e.code === "PIN_INVALID" || e.code === "PIN_REQUIRED")) {
+        setPin("");
+        setPinError(e.message);
+        return;
+      }
       onError(e instanceof ApiError ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -286,7 +307,20 @@ function ConfirmDialog({ task, onClose, onDone, onError }: {
           <SimBadge>{pending.action_type === "SUPPLIER_ORDER" ? "SIMULATED SUPPLIER" : "DEMO PAYMENT LINK"}</SimBadge>
           <Badge tone={left > 60 ? "muted" : "red"}>{left > 0 ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired"}</Badge>
         </div>
-        <Button className="w-full" loading={busy} disabled={left === 0} onClick={approve}><CheckCircle2 className="size-4" /> Approve {rupees(pending.amount)}</Button>
+        {needsPin && (
+          <div className="mb-4">
+            <label htmlFor="pin" className="text-xs font-bold text-ink-soft">Approval PIN</label>
+            <input id="pin" type="password" inputMode="numeric" autoComplete="off" maxLength={4} value={pin}
+              onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setPinError(null); }}
+              className="mt-1 h-11 w-full rounded-xl border border-line px-3 tracking-[0.5em] outline-cyan" />
+            {pinError && <p className="mt-1 text-xs font-semibold text-red">{pinError}</p>}
+          </div>
+        )}
+        {left === 0 ? (
+          <Button className="w-full" loading={busy} onClick={renew}><RefreshCw className="size-4" /> Approval window expired · Renew</Button>
+        ) : (
+          <Button className="w-full" loading={busy} disabled={needsPin && pin.length !== 4} onClick={approve}><CheckCircle2 className="size-4" /> Approve {rupees(pending.amount)}</Button>
+        )}
         <Button kind="ghost" className="mt-2 w-full" onClick={onClose}>Cancel</Button>
       </div>
     </div>

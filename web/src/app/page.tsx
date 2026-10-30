@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { DuesDonut, SalesBars } from "@/components/charts";
 import { Badge, Button, Card, ErrorBox, PageTitle, Skeleton, StateBadge, useLoad } from "@/components/ui";
 import { api, ApiError, rupees, when } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -39,6 +40,26 @@ export default function Overview() {
     }
   };
 
+  // Each brief priority has a quick action: collect starts a payment-link draft, restock asks Saathi for a plan.
+  const act = async (p: NonNullable<typeof dash.data>["brief"]["priorities"][number]) => {
+    if (!p.action) return;
+    setBusy(true);
+    try {
+      if (p.action.type === "COLLECT" && p.action.invoice_id) {
+        const task = await api.paymentLink(p.action.invoice_id);
+        router.push(`/tasks/${task.id}`);
+      } else if (p.action.type === "RESTOCK") {
+        const res = await api.ask("Weekend ke liye ₹5,000 ke andar stock arrange karo");
+        if (res.task) router.push(`/tasks/${res.task.id}`);
+        else setReply(res.reply);
+      }
+    } catch (err) {
+      setReply(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const d = dash.data;
   const needs = (tasks.data ?? []).filter((t) => t.group === "NEEDS_APPROVAL");
 
@@ -56,19 +77,46 @@ export default function Overview() {
 
       {dash.error && !d ? <ErrorBox error={dash.error} onRetry={dash.reload} /> : !d ? <Skeleton /> : (
         <>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-lg font-extrabold">Business overview</h2>
+            <span className="hidden text-xs text-muted sm:inline">From connected records · refreshes every 15 s</span>
+          </div>
           <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
             {[
-              { label: "Dues to collect", value: rupees(d.outstanding_dues), sub: `${d.outstanding_count} open invoices`, href: "/invoices", color: "text-amber" },
-              { label: "Last week sales", value: rupees(d.last_week_sales), sub: `~${rupees(d.last_week_margin)} gross margin`, href: "/inventory", color: "text-green" },
-              { label: "Low-stock items", value: String(d.low_stock_count), sub: "below half a week's demand", href: "/inventory", color: "text-red" },
-              { label: "Needs approval", value: String(d.needs_approval), sub: `${d.in_progress} in progress`, href: "/inbox", color: "text-cyan" },
+              { label: "Dues to collect", value: rupees(d.outstanding_dues), sub: `${d.outstanding_count} open invoices`, href: "/invoices", color: "text-amber", tint: "from-[#FFF6E6]" },
+              { label: "Last week sales", value: rupees(d.last_week_sales), sub: `~${rupees(d.last_week_margin)} gross margin`, href: "/inventory", color: "text-green", tint: "from-[#E9F8EF]" },
+              { label: "Low-stock items", value: String(d.low_stock_count), sub: "below half a week's demand", href: "/inventory", color: "text-red", tint: "from-[#FDEEEE]" },
+              { label: "Needs approval", value: String(d.needs_approval), sub: `${d.in_progress} in progress`, href: "/inbox", color: "text-[#0083AD]", tint: "from-cyan-soft" },
             ].map((k) => (
-              <Link key={k.label} href={k.href} className="card p-5 transition hover:-translate-y-0.5">
+              <Link key={k.label} href={k.href} className={`card bg-linear-to-br ${k.tint} to-white p-5 transition hover:-translate-y-0.5`}>
                 <p className="text-xs font-semibold text-ink-soft">{k.label}</p>
                 <p className="num mt-1 text-2xl font-extrabold tracking-tight sm:text-3xl">{k.value}</p>
                 <p className={`mt-1 text-xs font-semibold ${k.color}`}>{k.sub}</p>
               </Link>
             ))}
+          </div>
+
+          <div className="mb-6 grid gap-6 lg:grid-cols-5">
+            <Card className="lg:col-span-3">
+              <div className="mb-2 flex items-center justify-between">
+                <div>
+                  <h2 className="font-extrabold">Sales trend</h2>
+                  <p className="text-xs text-muted">Weekly · sell price × packs sold · POS records (SAMPLE)</p>
+                </div>
+                <Link href="/inventory" className="text-sm font-bold text-[#0083AD]">By item →</Link>
+              </div>
+              <SalesBars weeks={d.weekly_sales} />
+            </Card>
+            <Card className="lg:col-span-2">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <h2 className="font-extrabold">Customer dues</h2>
+                  <p className="text-xs text-muted">Paid counts only after status verification</p>
+                </div>
+                <Link href="/payments" className="text-sm font-bold text-[#0083AD]">Payments →</Link>
+              </div>
+              <DuesDonut dues={d.dues} />
+            </Card>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-5">
@@ -87,6 +135,12 @@ export default function Overview() {
                           <p className="text-sm text-ink-soft">{p.detail}</p>
                           <p className="mt-1 text-[11px] text-muted">Source: {p.sources.join(" · ")}</p>
                         </div>
+                        {p.action && (
+                          <button onClick={() => void act(p)} disabled={busy}
+                            className="h-9 shrink-0 self-center rounded-xl border border-cyan px-3 text-sm font-bold text-[#0083AD] hover:bg-cyan-soft disabled:opacity-50">
+                            {p.action.label}
+                          </button>
+                        )}
                       </li>
                     );
                   })}

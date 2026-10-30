@@ -63,7 +63,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
       },
       body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
     });
-  } catch (e) {
+  } catch {
     throw new ApiError(0, "NETWORK", controller.signal.aborted ? "The server took too long to respond" : "Can't reach Saathi. Check your connection.");
   } finally {
     clearTimeout(timer);
@@ -97,9 +97,15 @@ export const api = {
   askVoiceLang: (form: FormData, language: string) =>
     request<AssistantResponse>("POST", `/api/v1/assistant/voice?language=${encodeURIComponent(language)}`, form),
   // One key per tap sequence: a retry of the same tap reuses it so it can never double-order.
-  confirm: (approvalId: string, key: string = newKey()) =>
-    request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined, { "Idempotency-Key": key }),
+  confirm: (approvalId: string, key: string = newKey(), pin?: string) =>
+    request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined,
+      pin ? { "Idempotency-Key": key, "X-Approval-Pin": pin } : { "Idempotency-Key": key }),
+  setApprovalPin: (password: string, pin: string | null) =>
+    request<SimpleResult>("POST", "/api/v1/me/approval-pin", { password, pin }),
   reject: (approvalId: string) => request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/reject`),
+  readback: (taskId: string, lang: "hi-IN" | "en-IN", audio = false) =>
+    request<S["ReadbackOut"]>("GET", `/api/v1/tasks/${taskId}/readback?lang=${lang}&audio=${audio}`),
+  renewApproval: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/renew-approval`),
   replan: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/replan`),
   paymentLink: (invoiceId: string) => request<TaskDetail>("POST", `/api/v1/invoices/${invoiceId}/payment-link`),
   demoReset: () => request<SimpleResult>("POST", "/api/v1/demo/reset"),

@@ -7,9 +7,10 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.errors import ApiError
-from app.models import Approval, IdempotencyRecord, Task, utcnow
-from app.security import Ctx
+from app.models import Approval, IdempotencyRecord, Task, User, utcnow
+from app.security import Ctx, verify_password
 from app.services import audit, dues_flow, restock_flow
 from app.tools import registry
 
@@ -39,7 +40,33 @@ def _check_usable(db: Session, approval: Approval) -> None:
         raise ApiError(409, "APPROVAL_EXPIRED", "Approval expired; please review again")
 
 
-def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str) -> uuid.UUID:
+PIN_MAX_TRIES = 5
+PIN_LOCK = timedelta(minutes=10)
+
+
+def check_pin(db: Session, ctx: Ctx, pin: str | None) -> None:
+    """Optional approval PIN. Wrong tries are counted and committed even though the request fails."""
+    user = db.get(User, ctx.user.id, with_for_update=True)
+    if not user.approval_pin_hash:
+        return
+    now = utcnow()
+    if user.pin_locked_until and user.pin_locked_until > now:
+        raise ApiError(423, "PIN_LOCKED", "Too many wrong PINs. Try again in a few minutes")
+    if not pin:
+        raise ApiError(403, "PIN_REQUIRED", "Enter your approval PIN")
+    if verify_password(pin, user.approval_pin_hash):
+        user.pin_failed_count = 0
+        return
+    user.pin_failed_count += 1
+    if user.pin_failed_count >= PIN_MAX_TRIES:
+        user.pin_failed_count, user.pin_locked_until = 0, now + PIN_LOCK
+        audit.record(db, ctx.merchant_id, ctx.actor, "APPROVAL_PIN_LOCKED", "user", user.id,
+                     "Approval PIN locked after repeated wrong attempts")
+    db.commit()
+    raise ApiError(403, "PIN_INVALID", "Wrong approval PIN")
+
+
+def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str, pin: str | None = None) -> uuid.UUID:
     if not idempotency_key or len(idempotency_key) > 120:
         raise ApiError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required")
     request_hash = hashlib.sha256(f"{approval_id}".encode()).hexdigest()
@@ -52,6 +79,7 @@ def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str)
         if existing.status == "COMPLETED":
             return uuid.UUID(existing.result_ref)
 
+    check_pin(db, ctx, pin)
     approval = _load(db, ctx, approval_id)  # row lock serialises concurrent confirms
     _check_usable(db, approval)
     if approval.action_type == "SUPPLIER_ORDER":
@@ -95,5 +123,40 @@ def reject(db: Session, ctx: Ctx, approval_id: uuid.UUID) -> uuid.UUID:
         restock_flow.reject(db, task, approval, ctx.actor)
     else:
         dues_flow.reject(db, task, approval, ctx.actor)
+    db.commit()
+    return task.id
+
+
+def renew(db: Session, ctx: Ctx, task_id: uuid.UUID) -> uuid.UUID:
+    """Fresh approval window for the same, unchanged action after the old one expired.
+    The payload is re-checked first; if anything changed, the old approval is superseded instead."""
+    task = db.scalars(select(Task).where(Task.id == task_id, Task.merchant_id == ctx.merchant_id)
+                      .with_for_update()).first()
+    if task is None:
+        raise ApiError(404, "NOT_FOUND", "Task not found")
+    old = db.scalars(select(Approval).where(Approval.task_id == task.id, Approval.status.in_(("PENDING", "EXPIRED")))
+                     .order_by(Approval.created_at.desc()).with_for_update()).first()
+    if task.state != "AWAITING_APPROVAL" or old is None:
+        raise ApiError(409, "INVALID_TRANSITION", "Nothing is waiting for approval on this task")
+    now = utcnow()
+    if old.status == "PENDING" and old.expires_at > now:
+        return task.id  # still valid; nothing to renew
+    current = (restock_flow.recompute_hash(db, old) if old.action_type == "SUPPLIER_ORDER"
+               else dues_flow.recompute_hash(db, old))
+    if current != old.payload_hash:
+        old.status = "SUPERSEDED"
+        db.commit()
+        raise ApiError(409, "HASH_MISMATCH", "The plan changed since it was drafted; ask Saathi for a fresh plan")
+    old.status = "EXPIRED"
+    fresh = Approval(
+        merchant_id=old.merchant_id, task_id=old.task_id, plan_id=old.plan_id, invoice_id=old.invoice_id,
+        action_type=old.action_type, payload_hash=old.payload_hash, payload_snapshot=old.payload_snapshot,
+        amount=old.amount, currency=old.currency, status="PENDING",
+        expires_at=now + timedelta(minutes=get_settings().approval_ttl_minutes),
+    )
+    db.add(fresh)
+    db.flush()
+    audit.record(db, ctx.merchant_id, ctx.actor, "APPROVAL_RENEWED", "approval", fresh.id,
+                 f"Approval window renewed for the same ₹{old.amount:,.2f} (unchanged)", task_id=task.id)
     db.commit()
     return task.id

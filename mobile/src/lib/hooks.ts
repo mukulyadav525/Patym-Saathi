@@ -1,6 +1,6 @@
 import NetInfo from "@react-native-community/netinfo";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ApiError } from "./api";
 
@@ -17,7 +17,9 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const loaderRef = useRef(loader);
-  loaderRef.current = loader;
+  useLayoutEffect(() => {
+    loaderRef.current = loader;
+  });
 
   const run = useCallback(async (mode: "initial" | "refresh" = "initial") => {
     if (mode === "refresh") setRefreshing(true);
@@ -30,7 +32,8 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
       setLoading(false);
       setRefreshing(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Callers pass their own deps (e.g. a task id); the loader itself is read through a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
   }, deps);
 
   useFocusEffect(

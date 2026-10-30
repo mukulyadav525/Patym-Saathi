@@ -1,10 +1,9 @@
-import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import { Card, Empty, ErrorState, IconTile, Loading, Row, Screen, StateBadge, Txt, styles as ui } from "@/components/ui";
-import { api, type TaskSummary } from "@/lib/api";
+import { Button, Card, Empty, ErrorState, IconTile, Loading, Row, Screen, StateBadge, Txt, styles as ui } from "@/components/ui";
+import { api, ApiError, type TaskSummary } from "@/lib/api";
 import { rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
@@ -48,10 +47,31 @@ export default function Tasks() {
   );
 }
 
-function TaskCard({ t }: { t: TaskSummary; onChanged: () => void }) {
+function TaskCard({ t, onChanged }: { t: TaskSummary; onChanged: () => void }) {
   const restock = t.task_type === "RESTOCK";
+  const [rejecting, setRejecting] = useState(false);
+  const open = (review?: boolean) =>
+    router.push({ pathname: "/task/[id]", params: review ? { id: t.id, review: "1" } : { id: t.id } });
+  // Approve always goes through the review sheet (exact lines, total, expiry); reject can happen here.
+  const reject = () =>
+    Alert.alert("Reject this?", restock ? "Nothing will be ordered." : "No payment link will be created.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Reject", style: "destructive", onPress: async () => {
+          setRejecting(true);
+          try {
+            await api.reject(t.pending_approval_id!);
+          } catch (e) {
+            Alert.alert("Couldn't reject", e instanceof ApiError ? e.message : String(e));
+          } finally {
+            setRejecting(false);
+            onChanged();
+          }
+        },
+      },
+    ]);
   return (
-    <Card onPress={() => router.push({ pathname: "/task/[id]", params: { id: t.id } })}>
+    <Card onPress={() => open()}>
       <Row style={{ alignItems: "flex-start" }}>
         <IconTile icon={restock ? "cart-outline" : "link-outline"} tone={restock ? "red" : "cyan"} />
         <View style={{ flex: 1, marginLeft: 12 }}>
@@ -67,10 +87,16 @@ function TaskCard({ t }: { t: TaskSummary; onChanged: () => void }) {
             <StateBadge state={t.state} />
           </Row>
           {t.result_note && <Txt style={[ui.muted, { marginTop: 4 }]} numberOfLines={2}>{t.result_note}</Txt>}
-          {t.group === "NEEDS_APPROVAL" && (
-            <Row style={s.cta}>
-              <Txt style={{ color: "#fff", fontWeight: "800" }}>Review & approve</Txt>
-              <Ionicons name="chevron-forward" size={16} color="#fff" />
+          {t.group === "NEEDS_APPROVAL" && t.pending_approval_id && (
+            <Row style={{ gap: 10, marginTop: 12 }}>
+              <Button label="Reject" kind="secondary" small style={{ flex: 1 }} loading={rejecting} onPress={reject} />
+              <Button label="Approve" small style={{ flex: 1 }} icon="shield-checkmark" onPress={() => open(true)} />
+            </Row>
+          )}
+          {t.group === "IN_PROGRESS" && (
+            <Row style={{ gap: 10, marginTop: 12 }}>
+              <Button label={restock ? "Track order" : "View link"} kind="secondary" small style={{ flex: 1 }}
+                icon={restock ? "time-outline" : "link-outline"} onPress={() => open()} />
             </Row>
           )}
         </View>
@@ -85,5 +111,4 @@ const s = StyleSheet.create({
   segText: { fontSize: 13, fontWeight: "700", color: colors.inkSoft },
   count: { marginLeft: 6, backgroundColor: colors.bg, borderRadius: 10, minWidth: 20, alignItems: "center", paddingHorizontal: 5 },
   countText: { fontSize: 11, fontWeight: "800", color: colors.inkSoft },
-  cta: { marginTop: 10, backgroundColor: colors.cyan, borderRadius: radius.md, paddingVertical: 10, justifyContent: "center", gap: 4 },
 });

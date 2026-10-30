@@ -18,6 +18,7 @@ type AuthState = {
   session: LoginResponse | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -55,7 +56,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(res);
   }, []);
 
-  const value = useMemo(() => ({ ready, session, signIn, signOut }), [ready, session, signIn, signOut]);
+  // Re-read the user (e.g. after setting an approval PIN) and keep the stored session in step.
+  const refresh = useCallback(async () => {
+    const res = await api.me();
+    await store.set(JSON.stringify(res));
+    setSession(res);
+  }, []);
+
+  const value = useMemo(() => ({ ready, session, signIn, signOut, refresh }), [ready, session, signIn, signOut, refresh]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

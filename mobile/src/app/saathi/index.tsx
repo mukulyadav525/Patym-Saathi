@@ -11,8 +11,8 @@ import { colors, radius, type Tone } from "@/lib/theme";
 
 const ACTIONS: { label: string; icon: IconName; tone: Tone; go: () => void }[] = [
   { label: "Collect", icon: "qr-code-outline", tone: "cyan", go: () => router.push("/dues") },
-  { label: "Restock", icon: "cube-outline", tone: "amber", go: () => router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } }) },
-  { label: "Stock", icon: "layers-outline", tone: "green", go: () => router.push("/inventory") },
+  { label: "Payments", icon: "paper-plane-outline", tone: "green", go: () => router.push("/settlements") },
+  { label: "Stock", icon: "cube-outline", tone: "amber", go: () => router.push("/inventory") },
   { label: "Reports", icon: "bar-chart-outline", tone: "violet", go: () => router.push("/brief") },
 ];
 
@@ -36,6 +36,10 @@ export default function Home() {
         <Pressable onPress={() => router.push("/connections")} hitSlop={8} style={s.demoPill} accessibilityLabel="Connection status">
           <View style={s.dot} />
           <Txt style={s.demoPillText}>{data?.demo_mode ? "DEMO" : "LIVE"}</Txt>
+        </Pressable>
+        <Pressable onPress={() => router.push("/activity")} hitSlop={8} style={{ marginLeft: 10 }} accessibilityLabel="Activity and alerts">
+          <Ionicons name="notifications-outline" size={22} color={colors.navy} />
+          {data && data.needs_approval > 0 && <View style={s.bellDot} />}
         </Pressable>
         <Pressable onPress={() => router.push("/profile")} style={s.avatar} accessibilityLabel="Profile and settings" hitSlop={6}>
           <Txt style={{ color: colors.navy, fontWeight: "800" }}>{first.charAt(0)}</Txt>
@@ -95,6 +99,17 @@ export default function Home() {
             <BriefList brief={data.brief} compact />
           </View>
 
+          <Card onPress={() => router.navigate("/")} style={s.grow}>
+            <Row>
+              <View style={s.growIcon}><Ionicons name="storefront" size={24} color={colors.navy} /></View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Txt style={ui.h3}>Grow your business with Paytm</Txt>
+                <Txt style={ui.muted}>QR · Soundbox · Card Machine · Merchant Loan</Txt>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.muted} />
+            </Row>
+          </Card>
+
           <SectionTitle title="Connected records" action="View all" onAction={() => router.push("/connections")} />
           <Card>
             {data.connections.map((c) => (
@@ -121,6 +136,9 @@ const s = StyleSheet.create({
   statLabel: { fontSize: 13, color: colors.inkSoft, fontWeight: "600", marginBottom: 4 },
   action: { alignItems: "center", width: "24%", paddingVertical: 8 },
   actionLabel: { marginTop: 6, fontSize: 13, fontWeight: "700", color: colors.ink },
+  bellDot: { position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red, borderWidth: 1, borderColor: "#fff" },
+  grow: { backgroundColor: "#EAF5FC", borderWidth: 1, borderColor: "#CDEBFA", marginTop: 12 },
+  growIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
   approve: { borderWidth: 1, borderColor: "#FFE1A8", backgroundColor: "#FFFBF2" },
   ai: { backgroundColor: "#FFF5F5", borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: "#FBE1E1", marginBottom: 4 },
 });

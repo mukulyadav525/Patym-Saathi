@@ -18,6 +18,10 @@ export default function Profile() {
   const items: { key: StringKey; icon: IconName; go: () => void; value?: string }[] = [
     { key: "settlements", icon: "cash-outline", go: () => router.push(session ? "/settlements" : signInThen("/settlements")) },
     { key: "notifications", icon: "notifications-outline", go: () => router.push("/notifications") },
+    {
+      key: "approvalPin", icon: "keypad-outline", go: () => router.push(session ? "/approval-pin" : signInThen("/approval-pin")),
+      value: session ? (session.user.has_approval_pin ? (lang === "hi" ? "चालू" : "On") : (lang === "hi" ? "बंद" : "Off")) : undefined,
+    },
     { key: "language", icon: "language-outline", go: () => router.push("/language"), value: lang === "hi" ? "हिन्दी" : "English" },
     { key: "legal", icon: "document-lock-outline", go: () => router.push("/legal") },
   ];

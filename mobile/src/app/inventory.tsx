@@ -18,7 +18,7 @@ export default function InventoryScreen() {
         <>
           {low.length > 0 && (
             <Card style={{ backgroundColor: colors.amberSoft, borderWidth: 1, borderColor: "#FFD48A" }}>
-              <Txt style={[ui.h3, { color: colors.amber }]}>{low.length} items below half a week's demand</Txt>
+              <Txt style={[ui.h3, { color: colors.amber }]}>{low.length} items below half a week’s demand</Txt>
               <Txt style={[ui.muted, { marginTop: 2 }]}>{low.map((i) => i.name).join(", ")}</Txt>
               <Button label="Plan restock with Saathi" icon="sparkles" small style={{ marginTop: 10 }}
                 onPress={() => router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } })} />

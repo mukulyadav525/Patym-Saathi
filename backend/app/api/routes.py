@@ -11,8 +11,8 @@ from app.config import get_settings
 from app.db import get_db
 from app.errors import ApiError
 from app.models import Invoice, MerchantMembership, Order, Task, User
-from app.security import Ctx, current_ctx, issue_token, verify_password
-from app.services import approvals, assistant, dues_flow, readback, restock_flow, views
+from app.security import Ctx, current_ctx, hash_password, issue_token, verify_password
+from app.services import approvals, assistant, audit, dues_flow, readback, restock_flow, views
 from app.services.common import move_task
 from app.tools import registry
 
@@ -33,6 +33,11 @@ def health(db: Session = Depends(get_db)) -> s.Health:
                     paytm_mode=settings.paytm_env.upper(), voice="LIVE" if sarvam.enabled() else "OFF")
 
 
+def user_out(user: User, role: str) -> s.UserOut:
+    return s.UserOut(id=str(user.id), email=user.email, display_name=user.display_name, role=role,
+                     has_approval_pin=bool(user.approval_pin_hash))
+
+
 @api.post("/auth/login", response_model=s.LoginResponse)
 def login(body: s.LoginRequest, db: Session = Depends(get_db)) -> s.LoginResponse:
     user = db.scalars(select(User).where(User.email == body.email.strip().lower())).first()
@@ -45,7 +50,7 @@ def login(body: s.LoginRequest, db: Session = Depends(get_db)) -> s.LoginRespons
     ctx = current_ctx(f"Bearer {issue_token(user, membership.merchant_id)}", db)
     return s.LoginResponse(
         token=issue_token(user, membership.merchant_id),
-        user=s.UserOut(id=str(user.id), email=user.email, display_name=user.display_name, role=membership.role),
+        user=user_out(user, membership.role),
         merchant=views.merchant_out(ctx.merchant), demo_mode=get_settings().demo_mode,
     )
 
@@ -54,9 +59,23 @@ def login(body: s.LoginRequest, db: Session = Depends(get_db)) -> s.LoginRespons
 def me(ctx: Ctx = Depends(current_ctx), authorization: str = Header()) -> s.LoginResponse:
     return s.LoginResponse(
         token=authorization.split(" ", 1)[1],
-        user=s.UserOut(id=str(ctx.user.id), email=ctx.user.email, display_name=ctx.user.display_name, role=ctx.role),
+        user=user_out(ctx.user, ctx.role),
         merchant=views.merchant_out(ctx.merchant), demo_mode=get_settings().demo_mode,
     )
+
+
+@api.post("/me/approval-pin", response_model=s.SimpleResult)
+def set_approval_pin(body: s.ApprovalPinRequest, ctx: Ctx = Depends(current_ctx),
+                     db: Session = Depends(get_db)) -> s.SimpleResult:
+    user = db.get(User, ctx.user.id)
+    if not verify_password(body.password, user.password_hash):
+        raise ApiError(401, "BAD_CREDENTIALS", "Password is incorrect")
+    user.approval_pin_hash = hash_password(body.pin) if body.pin else None
+    user.pin_failed_count, user.pin_locked_until = 0, None
+    audit.record(db, ctx.merchant_id, ctx.actor, "APPROVAL_PIN_SET" if body.pin else "APPROVAL_PIN_CLEARED",
+                 "user", user.id, f"{user.display_name} {'set' if body.pin else 'removed'} an approval PIN")
+    db.commit()
+    return s.SimpleResult(ok=True, message="Approval PIN set" if body.pin else "Approval PIN removed")
 
 
 @api.get("/dashboard", response_model=s.DashboardOut)
@@ -135,9 +154,15 @@ def replan(task_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = De
 
 @api.post("/approvals/{approval_id}/confirm", response_model=s.TaskDetail)
 def confirm_approval(approval_id: uuid.UUID, idempotency_key: str = Header(alias="Idempotency-Key"),
+                     approval_pin: str | None = Header(default=None, alias="X-Approval-Pin", max_length=8),
                      ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.TaskDetail:
-    task_id = approvals.confirm(db, ctx, approval_id, idempotency_key)
+    task_id = approvals.confirm(db, ctx, approval_id, idempotency_key, approval_pin)
     return _task_or_404(db, ctx, task_id)
+
+
+@api.post("/tasks/{task_id}/renew-approval", response_model=s.TaskDetail)
+def renew_approval(task_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.TaskDetail:
+    return _task_or_404(db, ctx, approvals.renew(db, ctx, task_id))
 
 
 @api.post("/approvals/{approval_id}/reject", response_model=s.TaskDetail)

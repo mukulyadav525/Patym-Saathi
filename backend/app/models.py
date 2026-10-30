@@ -58,6 +58,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(160), unique=True)
     display_name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Optional 4-digit approval PIN (PBKDF2 hash). When set, every approval needs it.
+    approval_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pin_failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    pin_locked_until: Mapped[datetime | None] = ts(nullable=True)
     created_at: Mapped[datetime] = ts()
 
 

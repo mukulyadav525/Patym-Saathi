@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
+import { createAudioPlayer } from "expo-audio";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Modal, Pressable, Share, StyleSheet, TextInput, View } from "react-native";
@@ -17,10 +18,19 @@ import { rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
 export default function TaskScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, review } = useLocalSearchParams<{ id: string; review?: string }>();
   const { session } = useAuth();
   const { data: task, setData, error, loading, refreshing, reload } = useLoad(() => api.task(id), [id]);
   const [sheet, setSheet] = useState(false);
+  const reviewed = useRef(false);
+
+  // "Approve" on a task card lands here with review=1: open the review sheet once the task is loaded.
+  useEffect(() => {
+    if (review === "1" && !reviewed.current && task?.pending_approval_id) {
+      reviewed.current = true;
+      setSheet(true);
+    }
+  }, [review, task?.pending_approval_id]);
   const [busy, setBusy] = useState<string | null>(null);
 
   const run = async (label: string, fn: () => Promise<TaskDetail | void>) => {
@@ -160,6 +170,7 @@ export default function TaskScreen() {
             setSheet(false);
             setData(t);
           }}
+          onRenewed={setData}
         />
       )}
     </View>
@@ -293,7 +304,7 @@ function DuesBlock({ task, onChanged }: { task: TaskDetail; onChanged: () => Pro
               <Button small kind="secondary" icon="copy-outline" label="Copy" style={{ flex: 1 }}
                 onPress={() => Clipboard.setStringAsync(inv.link_url!)} />
             </Row>
-            <Txt style={[ui.muted, { fontSize: 11, marginTop: 6 }]}>DEMO link: no real money moves. You share it; Saathi doesn't send messages.</Txt>
+            <Txt style={[ui.muted, { fontSize: 11, marginTop: 6 }]}>DEMO link: no real money moves. You share it; Saathi doesn’t send messages.</Txt>
           </View>
         )}
       </Card>
@@ -337,15 +348,36 @@ function DuesBlock({ task, onChanged }: { task: TaskDetail; onChanged: () => Pro
   );
 }
 
-function ApproveSheet({ visible, task, onClose, onDone }: {
-  visible: boolean; task: TaskDetail; onClose: () => void; onDone: (t: TaskDetail) => void;
+function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
+  visible: boolean; task: TaskDetail; onClose: () => void; onDone: (t: TaskDetail) => void; onRenewed: (t: TaskDetail) => void;
 }) {
+  const { session } = useAuth();
+  const needsPin = !!session?.user.has_approval_pin;
+  const [pin, setPin] = useState("");
   const pending = task.approvals.find((a) => a.id === task.pending_approval_id)!;
   const plan = task.plans[task.plans.length - 1];
   const key = useRef(api.newKey());
   const [busy, setBusy] = useState(false);
-  const [pin, setPin] = useState("");
   const [left, setLeft] = useState(0);
+  const [heard, setHeard] = useState<{ text: string; voice: string } | null>(null);
+  const [listening, setListening] = useState(false);
+
+  // Read-back is built on the server from the stored plan/invoice; audio only when Sarvam is configured.
+  const listen = async () => {
+    setListening(true);
+    try {
+      const rb = await api.readback(task.id, "hi-IN", true);
+      setHeard({ text: rb.text, voice: rb.voice });
+      if (rb.audio_base64) {
+        const player = createAudioPlayer({ uri: `data:${rb.mime ?? "audio/wav"};base64,${rb.audio_base64}` });
+        player.play();
+      }
+    } catch (e) {
+      setHeard({ text: e instanceof ApiError ? e.message : "Read-back unavailable", voice: "OFF" });
+    } finally {
+      setListening(false);
+    }
+  };
 
   useEffect(() => {
     key.current = api.newKey(); // fresh key per approval, reused across retries of this one
@@ -357,11 +389,30 @@ function ApproveSheet({ visible, task, onClose, onDone }: {
     return () => clearInterval(t);
   }, [pending.expires_at]);
 
+  // Expired window: ask the server for a fresh one; it re-checks the plan is unchanged first.
+  const renew = async () => {
+    setBusy(true);
+    try {
+      onRenewed(await api.renewApproval(task.id));
+    } catch (e) {
+      Alert.alert("Couldn't renew", e instanceof ApiError ? e.message : String(e));
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const approve = async () => {
     setBusy(true);
     try {
-      onDone(await api.confirm(pending.id, key.current));
+      onDone(await api.confirm(pending.id, key.current, needsPin ? pin : undefined));
     } catch (e) {
+      // A wrong PIN keeps the sheet open so the merchant can retry; anything else closes it.
+      if (e instanceof ApiError && (e.code === "PIN_INVALID" || e.code === "PIN_REQUIRED")) {
+        setPin("");
+        Alert.alert("Wrong PIN", e.message);
+        return;
+      }
       Alert.alert("Not approved", e instanceof ApiError ? e.message : String(e));
       onClose();
     } finally {
@@ -411,19 +462,37 @@ function ApproveSheet({ visible, task, onClose, onDone }: {
           <SimBadge label={pending.action_type === "SUPPLIER_ORDER" ? "SIMULATED SUPPLIER" : "DEMO PAYMENT LINK"} />
           <Badge label={left > 0 ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "Expired"} tone={left > 60 ? "muted" : "red"} icon="time-outline" />
         </Row>
-        <TextInput
-          value={pin}
-          onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, 4))}
-          placeholder="Optional 4-digit PIN"
-          keyboardType="number-pad"
-          secureTextEntry
-          style={[s.pin, pin.length > 0 && { letterSpacing: 6 }]}
-          placeholderTextColor={colors.muted}
-          accessibilityLabel="Optional PIN"
-        />
-        <Button label={`Approve ${rupees(pending.amount)}`} icon="checkmark-circle" onPress={approve} loading={busy} disabled={left === 0} />
+        <Pressable onPress={listen} style={s.listen} accessibilityRole="button" accessibilityLabel="Read back what you are approving">
+          <Ionicons name={listening ? "hourglass-outline" : "volume-medium-outline"} size={18} color={colors.navy} />
+          <Txt style={{ marginLeft: 6, fontWeight: "700", color: colors.navy }}>Suno · Read back</Txt>
+        </Pressable>
+        {heard && (
+          <View style={s.heard}>
+            <Txt style={{ fontSize: 13, color: colors.inkSoft }}>{heard.text}</Txt>
+            {heard.voice === "OFF" && <Txt style={[ui.muted, { fontSize: 11, marginTop: 4 }]}>Audio off (no Sarvam key) · text read-back</Txt>}
+          </View>
+        )}
+        {needsPin && (
+          <TextInput
+            value={pin}
+            onChangeText={(t) => setPin(t.replace(/\D/g, "").slice(0, 4))}
+            placeholder="Approval PIN"
+            keyboardType="number-pad"
+            secureTextEntry
+            maxLength={4}
+            style={[s.pin, pin.length > 0 && { letterSpacing: 6 }]}
+            placeholderTextColor={colors.muted}
+            accessibilityLabel="Approval PIN"
+          />
+        )}
+        {left === 0 ? (
+          <Button label="Approval window expired · Renew" icon="refresh" onPress={renew} loading={busy} />
+        ) : (
+          <Button label={`Approve ${rupees(pending.amount)}`} icon="checkmark-circle" onPress={approve} loading={busy}
+            disabled={needsPin && pin.length !== 4} />
+        )}
         <Button label="Cancel" kind="ghost" onPress={onClose} style={{ marginTop: 4 }} />
-        <Txt style={[ui.muted, { textAlign: "center", fontSize: 11 }]}>Voice "haan" never approves. Only this tap does.</Txt>
+        <Txt style={[ui.muted, { textAlign: "center", fontSize: 11 }]}>Voice “haan” never approves. Only this tap does.</Txt>
       </SafeAreaView>
       </View>
     </Modal>
@@ -448,4 +517,6 @@ const s = StyleSheet.create({
   grab: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, alignSelf: "center", marginBottom: 14 },
   readback: { backgroundColor: colors.bg, borderRadius: radius.md, padding: 14, marginVertical: 14 },
   pin: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 14, fontSize: 16, marginBottom: 12, color: colors.ink },
+  listen: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", minHeight: 44, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.cyanSoft, marginBottom: 10 },
+  heard: { padding: 10, borderRadius: radius.sm, backgroundColor: colors.bg, marginBottom: 12 },
 });

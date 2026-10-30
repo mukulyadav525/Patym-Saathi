@@ -47,10 +47,13 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+/* In the components layer so Tailwind utilities (bg-navy, gradients) can override it. */
+@layer components {
 .card {
-  background: #fff;
+  background-color: #fff;
   border-radius: 18px;
   box-shadow: 0 4px 14px rgba(11, 27, 51, 0.05);
+}
 }
 
 .num {

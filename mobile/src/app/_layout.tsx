@@ -24,6 +24,7 @@ function Gate() {
       <Stack.Protected guard={!!session}>
         <Stack.Screen name="saathi" />
         <Stack.Screen name="settlements" />
+        <Stack.Screen name="approval-pin" />
         <Stack.Screen name="task/[id]" />
         <Stack.Screen name="brief" />
         <Stack.Screen name="inventory" />

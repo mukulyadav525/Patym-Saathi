@@ -4,6 +4,7 @@ export type S = components["schemas"];
 export type TaskDetail = S["TaskDetail"];
 export type TaskSummary = S["TaskSummary"];
 export type LoginResponse = S["LoginResponse"];
+export type Dashboard = S["DashboardOut"];
 
 export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
 
@@ -58,8 +59,10 @@ export const api = {
   tools: () => request<S["ToolOut"][]>("GET", "/api/v1/tools"),
   audit: (cursor?: string) => request<S["Page"]>("GET", `/api/v1/audit?limit=100${cursor ? `&cursor=${cursor}` : ""}`),
   ask: (text: string) => request<S["AssistantResponse"]>("POST", "/api/v1/assistant/message", { text }),
-  confirm: (approvalId: string, key: string) =>
-    request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined, { "Idempotency-Key": key }),
+  renewApproval: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/renew-approval`),
+  confirm: (approvalId: string, key: string, pin?: string) =>
+    request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined,
+      pin ? { "Idempotency-Key": key, "X-Approval-Pin": pin } : { "Idempotency-Key": key }),
   reject: (approvalId: string) => request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/reject`),
   paymentLink: (invoiceId: string) => request<TaskDetail>("POST", `/api/v1/invoices/${invoiceId}/payment-link`),
   demoReset: () => request<S["SimpleResult"]>("POST", "/api/v1/demo/reset"),

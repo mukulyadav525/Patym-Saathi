@@ -26,6 +26,8 @@ const CHIPS = [
   { label: "Today's brief", text: "Aaj mere business mein kya important hai?" },
 ];
 const STEPS = ["Checking current stock", "Analyzing sales trends", "Comparing supplier prices"];
+const now = () => new Date().toISOString();
+const id = () => Math.random().toString(36).slice(2);
 
 export default function Assistant() {
   const params = useLocalSearchParams<{ listen?: string; prompt?: string }>();
@@ -39,16 +41,13 @@ export default function Assistant() {
   const scroll = useRef<ScrollViewInstance>(null);
   const inputRef = useRef<TextInputInstance>(null);
 
+  // Route params are external input (quick actions, the mic tab button): sync them into local state once.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (params.prompt === "restock") setInput(CHIPS[0].text);
   }, [params.prompt]);
   useEffect(() => {
-    if (params.listen) void toggleMic();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.listen]);
-  useEffect(() => {
     if (!busy) return;
-    setStep(0);
     const t = setInterval(() => setStep((n) => Math.min(n + 1, STEPS.length - 1)), 700);
     return () => clearInterval(t);
   }, [busy]);
@@ -57,10 +56,9 @@ export default function Assistant() {
     setMsgs((prev) => [...prev, m]);
     setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 50);
   };
-  const now = () => new Date().toISOString();
-  const id = () => Math.random().toString(36).slice(2);
 
   const handle = async (call: () => Promise<AssistantResponse>, originalText?: string) => {
+    setStep(0);
     setBusy(true);
     try {
       const res = await call();
@@ -111,6 +109,12 @@ export default function Assistant() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     setRecording(true);
   }
+  useEffect(() => {
+    // The mic tab button navigates here with a fresh `listen` param; start recording once per press.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (params.listen) void toggleMic();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.listen]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }} edges={["top", "left", "right"]}>

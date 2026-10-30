@@ -37,7 +37,7 @@ export function Screen({
       {!online && (
         <View style={styles.offline}>
           <Ionicons name="cloud-offline-outline" size={14} color="#fff" />
-          <Txt style={styles.offlineText}>You're offline. Showing last loaded data.</Txt>
+          <Txt style={styles.offlineText}>You’re offline. Showing last loaded data.</Txt>
         </View>
       )}
       {scroll ? (
