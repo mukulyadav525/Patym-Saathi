@@ -208,6 +208,14 @@ function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) 
           </Txt>
         </Row>
         <BudgetBar total={plan.total} budget={plan.budget} committed={plan.committed_total} />
+        {plan.festival && (
+          <View style={s.festival}>
+            <Ionicons name="flame" size={14} color={colors.amber} />
+            <Txt style={{ flex: 1, marginLeft: 6, fontSize: 12, color: colors.inkSoft }}>
+              {plan.festival} plan: each item’s weekly demand is multiplied by how much more it sold in your last {plan.festival} week.
+            </Txt>
+          </View>
+        )}
         <Row style={{ marginTop: 14, paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: colors.line }}>
           <Txt style={[s.th, { flex: 1 }]}>Item</Txt>
           <Txt style={[s.th, s.num]}>Sold/wk</Txt>
@@ -223,6 +231,9 @@ function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) 
                 <Txt style={[ui.muted, { fontSize: 11 }]}>
                   {l.pack_label} · {rupees(l.unit_price)} · {l.supplier_name.split(" ")[0]}
                 </Txt>
+                {l.uplift && Number(l.uplift) > 1 && (
+                  <Txt style={{ fontSize: 11, fontWeight: "800", color: colors.amber }}>{plan.festival} ×{Number(l.uplift).toFixed(1)}</Txt>
+                )}
               </View>
               <Txt style={[s.num, s.td]}>{l.status === "COMMITTED" ? "–" : Number(l.sold_per_week).toFixed(0)}</Txt>
               <Txt style={[s.num, s.td]}>{l.status === "COMMITTED" ? "–" : l.stock}</Txt>
@@ -517,6 +528,7 @@ const s = StyleSheet.create({
   grab: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, alignSelf: "center", marginBottom: 14 },
   readback: { backgroundColor: colors.bg, borderRadius: radius.md, padding: 14, marginVertical: 14 },
   pin: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 14, fontSize: 16, marginBottom: 12, color: colors.ink },
+  festival: { flexDirection: "row", alignItems: "flex-start", marginTop: 10, padding: 10, borderRadius: radius.sm, backgroundColor: colors.amberSoft },
   listen: { flexDirection: "row", alignItems: "center", alignSelf: "flex-start", minHeight: 44, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.cyanSoft, marginBottom: 10 },
   heard: { padding: 10, borderRadius: radius.sm, backgroundColor: colors.bg, marginBottom: 12 },
 });

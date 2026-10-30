@@ -17,6 +17,20 @@ export type LoginResponse = S["LoginResponse"];
 export type Connection = S["ConnectionOut"];
 export type Approval = S["ApprovalOut"];
 export type SimpleResult = S["SimpleResult"];
+export type GrowthOverview = S["GrowthOverview"];
+export type Festival = S["FestivalOut"];
+export type Impact = S["ImpactOut"];
+export type SlowMover = S["SlowMoverOut"];
+export type Offer = S["OfferOut"];
+export type Khata = S["KhataOut"];
+export type KhataCustomer = S["KhataCustomer"];
+export type Cashflow = S["CashflowOut"];
+export type BusinessSettings = S["BusinessSettingsOut"];
+export type Benchmarks = S["BenchmarksOut"];
+export type Speech = S["SpeechOut"];
+export type Scan = S["ScanOut"];
+export type Receipt = S["ReceiptOut"];
+export type Language = S["LanguageOut"];
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string, public details: Record<string, unknown> = {}) {
@@ -112,5 +126,31 @@ export const api = {
   demoDelivery: (taskId: string) => request<TaskDetail>("POST", `/api/v1/demo/tasks/${taskId}/simulate-delivery`),
   demoPayment: (invoiceId: string, amount?: string) =>
     request<SimpleResult>("POST", `/api/v1/demo/simulate-payment/${invoiceId}`, amount ? { amount } : {}),
+  growth: () => request<GrowthOverview>("GET", "/api/v1/growth/overview"),
+  festival: () => request<Festival | null>("GET", "/api/v1/growth/festival"),
+  impact: () => request<Impact>("GET", "/api/v1/growth/impact"),
+  briefSpeech: (lang: string, audio: boolean) =>
+    request<Speech>("GET", `/api/v1/brief/speech?lang=${lang}&audio=${audio}`),
+  languages: () => request<Language[]>("GET", "/api/v1/languages"),
+  slowMovers: () => request<SlowMover[]>("GET", "/api/v1/growth/slow-movers"),
+  offers: () => request<Offer[]>("GET", "/api/v1/offers"),
+  createOffer: (productId: string, discount: number) =>
+    request<Offer>("POST", "/api/v1/offers", { product_id: productId, discount_pct: discount }),
+  offerShared: (id: string) => request<Offer>("POST", `/api/v1/offers/${id}/shared`),
+  translate: (kind: "OFFER" | "INVOICE" | "KHATA", ref: string, target: string) =>
+    request<S["TranslateOut"]>("POST", "/api/v1/translate", { kind, ref, target }),
+  khata: () => request<Khata>("GET", "/api/v1/khata"),
+  cashflow: (includePending = true) => request<Cashflow>("GET", `/api/v1/cashflow?include_pending=${includePending}`),
+  businessSettings: () => request<BusinessSettings>("GET", "/api/v1/settings/business"),
+  saveBusinessSettings: (body: { cash_on_hand?: string; weekly_expenses?: string; default_restock_budget?: string }) =>
+    request<BusinessSettings>("POST", "/api/v1/settings/business", body),
+  benchmarks: () => request<Benchmarks>("GET", "/api/v1/benchmarks"),
+  scan: () => request<Scan>("POST", "/api/v1/agent/scan"),
+  bills: () => request<Receipt[]>("GET", "/api/v1/bills"),
+  billFromText: (text: string) => request<Receipt>("POST", "/api/v1/bills/text", { text }),
+  billFromPhoto: (form: FormData) => request<Receipt>("POST", "/api/v1/bills/scan", form),
+  confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[], supplier?: string) =>
+    request<Receipt>("POST", `/api/v1/bills/${id}/confirm`, { lines, supplier_name: supplier ?? null }),
+  discardBill: (id: string) => request<Receipt>("POST", `/api/v1/bills/${id}/discard`),
   newKey,
 };

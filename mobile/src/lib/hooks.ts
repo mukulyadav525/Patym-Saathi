@@ -48,7 +48,8 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
 export const rupees = (value: string | number | null | undefined, decimals = 0) => {
   if (value === null || value === undefined) return "—";
   const n = typeof value === "string" ? Number(value) : value;
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
+  const text = Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return `${n < 0 ? "−" : ""}₹${text}`;
 };
 
 export const timeAgo = (iso: string) => {

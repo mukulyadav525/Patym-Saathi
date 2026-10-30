@@ -25,6 +25,7 @@ function Gate() {
         <Stack.Screen name="saathi" />
         <Stack.Screen name="settlements" />
         <Stack.Screen name="approval-pin" />
+        <Stack.Screen name="grow" />
         <Stack.Screen name="task/[id]" />
         <Stack.Screen name="brief" />
         <Stack.Screen name="inventory" />

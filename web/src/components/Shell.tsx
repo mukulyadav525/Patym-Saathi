@@ -1,7 +1,8 @@
 "use client";
 
 import {
-  Bell, Boxes, ClipboardList, History, Inbox, IndianRupee, LayoutDashboard, LogOut, Menu, Network, Receipt, X,
+  Bell, BookOpen, Boxes, ClipboardList, History, Inbox, IndianRupee, LayoutDashboard, LogOut, Menu, Network, Receipt, ScanLine,
+  Sparkles, Tag, Wallet, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -19,6 +20,16 @@ const NAV = [
     items: [
       { href: "/inbox", label: "Task inbox", icon: Inbox },
       { href: "/audit", label: "Activity history", icon: History },
+    ],
+  },
+  {
+    group: "Grow with Saathi",
+    items: [
+      { href: "/grow", label: "Growth overview", icon: Sparkles },
+      { href: "/offers", label: "Slow stock offers", icon: Tag },
+      { href: "/khata", label: "Khata insights", icon: BookOpen },
+      { href: "/cashflow", label: "Cash flow", icon: Wallet },
+      { href: "/bills", label: "Bill to stock", icon: ScanLine },
     ],
   },
   {

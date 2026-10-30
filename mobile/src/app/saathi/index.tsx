@@ -1,10 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, StyleSheet, View } from "react-native";
 
 import { BriefList } from "@/components/BriefList";
+import { GrowGrid } from "@/components/grow";
+import { VoiceBrief } from "@/components/VoiceBrief";
 import { Brand, Card, ErrorState, IconTile, Loading, Row, Screen, SectionTitle, Txt, styles as ui, type IconName } from "@/components/ui";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { rupees, useLoad } from "@/lib/hooks";
 import { colors, radius, type Tone } from "@/lib/theme";
@@ -19,10 +22,36 @@ const ACTIONS: { label: string; icon: IconName; tone: Tone; go: () => void }[] =
 export default function Home() {
   const { session } = useAuth();
   const { data, error, loading, refreshing, reload } = useLoad(api.dashboard);
+  const growth = useLoad(api.growth);
   const first = session?.merchant.owner_name.split(" ")[0] ?? "";
+  const [scanning, setScanning] = useState(false);
+  const g = growth.data;
+
+  // Saathi check: drafts restock/collection tasks for approval (never acts on its own).
+  const scan = async () => {
+    if (scanning) return;
+    setScanning(true);
+    try {
+      const res = await api.scan();
+      const lines = [
+        res.created.length ? `Prepared ${res.created.length} task(s) for your approval:` : "Nothing new to prepare. Open tasks are already waiting.",
+        ...res.created.map((c) => `• ${c.title} (${rupees(c.amount)})`),
+        ...res.notes.map((n) => `• ${n}`),
+      ];
+      Alert.alert("Saathi checked your shop", lines.join("\n"), res.created.length
+        ? [{ text: "Later", style: "cancel" }, { text: "Review", onPress: () => router.navigate("/saathi/tasks") }]
+        : [{ text: "OK" }]);
+      reload();
+      growth.reload();
+    } catch (e) {
+      Alert.alert("Check failed", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setScanning(false);
+    }
+  };
 
   return (
-    <Screen refreshing={refreshing} onRefresh={reload}>
+    <Screen refreshing={refreshing} onRefresh={() => { reload(); growth.reload(); }}>
       <Row style={{ paddingVertical: 10 }}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
@@ -90,6 +119,19 @@ export default function Home() {
             </Card>
           )}
 
+          {g?.festival && (
+            <Pressable onPress={() => router.push("/grow/festival")} style={({ pressed }) => [s.festival, pressed && { opacity: 0.9 }]}
+              accessibilityRole="button">
+              <View style={s.diya}><Ionicons name="flame" size={22} color="#FFB300" /></View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Txt style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>{g.festival.name} in {g.festival.days_left} days</Txt>
+                <Txt style={{ color: "#E6D8F5", fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+                  Last year: {g.festival.top_items.slice(0, 2).map((i) => `${i.name} ${Number(i.uplift).toFixed(1)}×`).join(", ")}. Plan festival stock →
+                </Txt>
+              </View>
+            </Pressable>
+          )}
+
           <View style={s.ai}>
             <Row style={{ marginBottom: 6 }}>
               <Ionicons name="sparkles" size={18} color={colors.cyan} />
@@ -97,7 +139,36 @@ export default function Home() {
             </Row>
             <Txt style={[ui.h2, { marginBottom: 10 }]}>{data.brief.priorities.length} things need your attention</Txt>
             <BriefList brief={data.brief} compact />
+            <VoiceBrief />
           </View>
+
+          <View style={{ height: 12 }} />
+          <GrowGrid
+            title="Grow with Saathi"
+            tiles={[
+              { label: "Festival stock", icon: "flame-outline", href: "/grow/festival", isNew: !!g?.festival },
+              { label: "Slow stock offers", icon: "pricetag-outline", href: "/grow/offers", badge: g?.slow_movers ? String(g.slow_movers) : undefined },
+              { label: "Khata", icon: "book-outline", href: "/grow/khata", badge: g?.khata_late_customers ? String(g.khata_late_customers) : undefined },
+              { label: "Cash flow", icon: "wallet-outline", href: "/grow/cashflow", badge: g && Number(g.cash_shortfall) > 0 ? "!" : undefined },
+              { label: "Bill to stock", icon: "receipt-outline", href: "/grow/bills" },
+              { label: "Stores near you", icon: "people-outline", href: "/grow/benchmarks" },
+              { label: "Saathi impact", icon: "trophy-outline", href: "/grow/impact" },
+              { label: scanning ? "Checking…" : "Saathi check", icon: "scan-circle-outline", onPress: () => void scan(), badge: g?.proactive_tasks ? String(g.proactive_tasks) : undefined },
+            ]}
+          />
+
+          {g && (Number(g.impact.under_budget) + Number(g.impact.supplier_savings) > 0 || g.impact.payments_collected > 0) && (
+            <Card onPress={() => router.push("/grow/impact")} style={s.impact}>
+              <Row>
+                <Ionicons name="trophy" size={22} color={colors.green} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Txt style={{ fontWeight: "800" }}>Saathi saved you {rupees(Number(g.impact.under_budget) + Number(g.impact.supplier_savings))}</Txt>
+                  <Txt style={ui.muted}>{rupees(g.impact.collected_via_links)} collected · ~{g.impact.minutes_saved_estimate} min saved</Txt>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+              </Row>
+            </Card>
+          )}
 
           <Card onPress={() => router.navigate("/")} style={s.grow}>
             <Row>
@@ -139,6 +210,9 @@ const s = StyleSheet.create({
   bellDot: { position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red, borderWidth: 1, borderColor: "#fff" },
   grow: { backgroundColor: "#EAF5FC", borderWidth: 1, borderColor: "#CDEBFA", marginTop: 12 },
   growIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  festival: { flexDirection: "row", alignItems: "center", backgroundColor: "#3B1D5E", borderRadius: radius.lg, padding: 14, marginBottom: 12 },
+  diya: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
+  impact: { backgroundColor: colors.greenSoft, borderWidth: 1, borderColor: "#BFE6CC" },
   approve: { borderWidth: 1, borderColor: "#FFE1A8", backgroundColor: "#FFFBF2" },
   ai: { backgroundColor: "#FFF5F5", borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: "#FBE1E1", marginBottom: 4 },
 });

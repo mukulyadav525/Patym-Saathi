@@ -21,16 +21,17 @@ export const setUnauthorizedHandler = (h: () => void) => (onUnauthorized = h);
 
 async function request<T>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
   let res: Response;
+  const isForm = body instanceof FormData;
   try {
     res = await fetch(`${API_BASE}${path}`, {
       method,
       headers: {
-        ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+        ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...headers,
       },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(15000),
+      body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
+      signal: AbortSignal.timeout(isForm ? 45000 : 15000),
     });
   } catch {
     throw new ApiError(0, "NETWORK", "Can't reach the Saathi API. Is it running?");
@@ -68,10 +69,35 @@ export const api = {
   demoReset: () => request<S["SimpleResult"]>("POST", "/api/v1/demo/reset"),
   demoDelivery: (taskId: string) => request<TaskDetail>("POST", `/api/v1/demo/tasks/${taskId}/simulate-delivery`),
   demoPayment: (invoiceId: string) => request<S["SimpleResult"]>("POST", `/api/v1/demo/simulate-payment/${invoiceId}`, {}),
+  growth: () => request<S["GrowthOverview"]>("GET", "/api/v1/growth/overview"),
+  briefSpeech: (lang: string, audio: boolean) => request<S["SpeechOut"]>("GET", `/api/v1/brief/speech?lang=${lang}&audio=${audio}`),
+  slowMovers: () => request<S["SlowMoverOut"][]>("GET", "/api/v1/growth/slow-movers"),
+  offers: () => request<S["OfferOut"][]>("GET", "/api/v1/offers"),
+  createOffer: (productId: string, discount: number) =>
+    request<S["OfferOut"]>("POST", "/api/v1/offers", { product_id: productId, discount_pct: discount }),
+  offerShared: (id: string) => request<S["OfferOut"]>("POST", `/api/v1/offers/${id}/shared`),
+  translate: (kind: "OFFER" | "INVOICE" | "KHATA", ref: string, target: string) =>
+    request<S["TranslateOut"]>("POST", "/api/v1/translate", { kind, ref, target }),
+  khata: () => request<S["KhataOut"]>("GET", "/api/v1/khata"),
+  cashflow: (includePending = true) => request<S["CashflowOut"]>("GET", `/api/v1/cashflow?include_pending=${includePending}`),
+  businessSettings: () => request<S["BusinessSettingsOut"]>("GET", "/api/v1/settings/business"),
+  saveBusinessSettings: (body: { cash_on_hand?: string; weekly_expenses?: string; default_restock_budget?: string }) =>
+    request<S["BusinessSettingsOut"]>("POST", "/api/v1/settings/business", body),
+  benchmarks: () => request<S["BenchmarksOut"]>("GET", "/api/v1/benchmarks"),
+  scan: () => request<S["ScanOut"]>("POST", "/api/v1/agent/scan"),
+  bills: () => request<S["ReceiptOut"][]>("GET", "/api/v1/bills"),
+  billFromText: (text: string) => request<S["ReceiptOut"]>("POST", "/api/v1/bills/text", { text }),
+  billFromPhoto: (form: FormData) => request<S["ReceiptOut"]>("POST", "/api/v1/bills/scan", form),
+  confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[]) =>
+    request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/confirm`, { lines }),
+  discardBill: (id: string) => request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/discard`),
 };
 
-export const rupees = (v: string | number | null | undefined, d = 0) =>
-  v == null ? "—" : `₹${Number(v).toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+export const rupees = (v: string | number | null | undefined, d = 0) => {
+  if (v == null) return "—";
+  const n = Number(v);
+  return `${n < 0 ? "−" : ""}₹${Math.abs(n).toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
+};
 
 export const when = (iso: string) =>
   new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });

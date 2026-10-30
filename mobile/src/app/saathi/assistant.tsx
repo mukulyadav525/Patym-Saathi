@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View,
@@ -22,9 +22,23 @@ type Msg =
 
 const CHIPS = [
   { label: "Plan stock for weekend", text: "Weekend ke liye ₹5,000 ke andar stock arrange karo" },
+  { label: "Diwali stock", text: "Diwali ke liye ₹10,000 ke andar stock arrange karo" },
   { label: "Collect dues", text: "Aman Stores ka pending payment collect karo" },
   { label: "Today's brief", text: "Aaj mere business mein kya important hai?" },
+  { label: "Slow stock", text: "Kaunsa maal nahi bik raha?" },
+  { label: "Khata", text: "Mera khata dikhao" },
+  { label: "Cash flow", text: "Cash kab kam padega?" },
 ];
+// Screens the assistant can point to (backend `open_screen`).
+const SCREENS: Record<string, { label: string; href: Href }> = {
+  festival: { label: "Open festival plan", href: "/grow/festival" },
+  offers: { label: "Open slow stock offers", href: "/grow/offers" },
+  khata: { label: "Open khata", href: "/grow/khata" },
+  cashflow: { label: "Open cash flow", href: "/grow/cashflow" },
+  bills: { label: "Add a supplier bill", href: "/grow/bills" },
+  benchmarks: { label: "Compare with nearby stores", href: "/grow/benchmarks" },
+  impact: { label: "See Saathi impact", href: "/grow/impact" },
+};
 const STEPS = ["Checking current stock", "Analyzing sales trends", "Comparing supplier prices"];
 const now = () => new Date().toISOString();
 const id = () => Math.random().toString(36).slice(2);
@@ -45,6 +59,7 @@ export default function Assistant() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (params.prompt === "restock") setInput(CHIPS[0].text);
+    else if (params.prompt === "festival") setInput(CHIPS[1].text);
   }, [params.prompt]);
   useEffect(() => {
     if (!busy) return;
@@ -236,6 +251,10 @@ function SaathiBubble({ m, onConfirmBudget, onSend }: {
               <Button label="Review & approve" icon="shield-checkmark-outline" style={{ marginTop: 12 }}
                 onPress={() => router.push({ pathname: "/task/[id]", params: { id: res.task!.id } })} />
             </Card>
+          )}
+          {res?.open_screen && SCREENS[res.open_screen] && (
+            <Button small kind="secondary" icon="arrow-forward" label={SCREENS[res.open_screen].label} style={{ marginTop: 8, alignSelf: "flex-start" }}
+              onPress={() => router.push(SCREENS[res.open_screen!].href)} />
           )}
           {res?.brief && (
             <Card style={{ marginTop: 10, marginBottom: 0 }}>

@@ -16,6 +16,7 @@ Android app (Expo) + web dashboard (Next.js) share one FastAPI backend and one P
 | Task inbox (approve/reject from the card), approval history, inventory, invoices, orders, payments & settlements, audit trail, connection status, demo reset | ✅ Android + web |
 | Paytm for Business home (Android): Saathi as the NEW first tile, QR/Soundbox/Card/Loan pages, profile menu (settlements, notifications, Hindi/English, approval PIN, legal) | ✅ product pages are labelled prototype screens |
 | Approval safety extras: optional 4-digit approval PIN (hashed, 5 tries → 10-min lock), renew an expired approval for the unchanged payload, read-back built from stored records | ✅ tested |
+| **Grow with Saathi** (Android grid + web pages): Diwali/festival restock from last festival's sales, Hindi voice brief, Saathi impact, slow stock → customer offers (8 languages via Mayura), proactive Saathi check, 14-day cash-flow forecast, khata insights with suggested credit limits, supplier bill → stock (photo via Sarvam Document AI or typed), nearby-store benchmarks | ✅ computed from records, 69 backend tests; Sarvam parts need the key |
 | Voice input (Sarvam STT) and read-back audio (Bulbul) | Built; **needs `SARVAM_API_KEY`**, otherwise text input and text read-back |
 | Paytm staging adapter (Create Link, Transaction Status v3, CHECKSUMHASH callbacks via `paytmchecksum`) | **Built to staging spec, tested with recorded mocks only**; set `PAYTM_ENV=staging`, `PAYTM_MID`, `PAYTM_MERCHANT_KEY` |
 
@@ -45,7 +46,7 @@ npm run seed        # alembic upgrade + deterministic demo data
 npm run api         # http://localhost:8000  (docs at /docs)
 npm run web         # http://localhost:3000
 npm run mobile      # Expo dev server; press a for Android, w for web preview
-npm run test:api    # 48 backend tests
+npm run test:api    # 69 backend tests
 npm run types       # regenerate shared/api-types.ts (API must be running)
 ```
 

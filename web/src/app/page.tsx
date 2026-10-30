@@ -19,6 +19,7 @@ export default function Overview() {
   const dash = useLoad(api.dashboard, [], 15000);
   const tasks = useLoad(api.tasks, [], 15000);
   const audit = useLoad(() => api.audit(), [], 15000);
+  const growth = useLoad(api.growth, [], 30000);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -95,6 +96,15 @@ export default function Overview() {
               </Link>
             ))}
           </div>
+
+          {growth.data && (growth.data.festival || Number(growth.data.cash_shortfall) > 0 || growth.data.slow_movers > 0) && (
+            <Link href="/grow" className="card mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 bg-[#3B1D5E] p-4 text-white transition hover:-translate-y-0.5">
+              {growth.data.festival && <span className="font-extrabold">🪔 {growth.data.festival.name} in {growth.data.festival.days_left} days: plan festival stock</span>}
+              {growth.data.slow_movers > 0 && <span className="text-sm text-[#E6D8F5]">{growth.data.slow_movers} slow items · {rupees(growth.data.slow_cash_tied_up)} tied up</span>}
+              {Number(growth.data.cash_shortfall) > 0 && <span className="text-sm text-[#FFC9C9]">Cash may fall short by {rupees(growth.data.cash_shortfall)}</span>}
+              <span className="ml-auto text-sm font-bold">Grow with Saathi →</span>
+            </Link>
+          )}
 
           <div className="mb-6 grid gap-6 lg:grid-cols-5">
             <Card className="lg:col-span-3">

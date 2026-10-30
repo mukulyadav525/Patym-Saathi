@@ -23,7 +23,16 @@ Independent hackathon concept (TeamAIR01). Sample data. Suppliers SIMULATED, pay
 | 2:10 | Web dashboard → Task inbox | Same task. Approve ₹4,850 here → **Simulate delivery** → inventory +31 packs (simulated). "₹150 under the limit." |
 | 2:50 | Phone: Dues | INV-1042 Aman Stores ₹1,200 → **Create payment link** → approve → DEMO link + Hindi message → share sheet. |
 | 3:20 | Task | **Simulate customer UPI payment** → signed webhook → server status check → 4/4 fields match → **PAID**. |
+| 3:30 | Saathi home → Grow with Saathi | Diwali banner → **Plan Diwali stock ₹10,000** → ₹9,889 plan, each item ×uplift from last Diwali. **Suno** plays the Hindi brief. Slow stock → draft offer → share. Khata: Aman pays late, suggested limit. |
 | 3:40 | Activity history | Every plan, approval, adapter call and check with timestamps. Close. |
+
+## Optional growth tour (if time allows)
+
+- **Saathi check** tile: prepares restock + collection tasks for approval; never acts alone.
+- **Cash flow**: "You may be short ₹X by <date>" with every assumption listed; links to Merchant Loan info only.
+- **Bill to stock**: type or photograph a supplier bill → review lines → confirm → stock goes up. An injected
+  instruction inside the bill text is ignored.
+- **Stores near you**: tea and noodles under-selling vs 18 nearby stores (aggregated, min 10 stores).
 
 ## Prepared answers
 

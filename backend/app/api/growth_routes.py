@@ -144,6 +144,10 @@ def translate(body: s.TranslateRequest, ctx: Ctx = Depends(current_ctx), db: Ses
     if body.kind == "OFFER":
         offer = db.scalars(select(Offer).where(Offer.merchant_id == ctx.merchant_id, Offer.id == _uuid(body.ref))).first()
         source_text = offer.message if offer else None
+        if offer and body.target == "en-IN":  # English has its own template; no translation needed
+            text = growth.offer_message(ctx.merchant, db.get(Product, offer.product_id), offer.offer_price,
+                                        offer.discount_pct, "en-IN")
+            return s.TranslateOut(text=text, language="en-IN", engine="TEMPLATE")
     elif body.kind == "INVOICE":
         inv = db.scalars(select(Invoice).where(Invoice.merchant_id == ctx.merchant_id, Invoice.id == _uuid(body.ref))).first()
         source_text = inv.draft_message if inv else None
