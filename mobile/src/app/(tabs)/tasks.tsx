@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
 import { Card, Empty, ErrorState, IconTile, Loading, Row, Screen, StateBadge, Txt, styles as ui } from "@/components/ui";
 import { api, type TaskSummary } from "@/lib/api";
@@ -23,7 +23,7 @@ export default function Tasks() {
     <Screen refreshing={refreshing} onRefresh={reload}>
       <Txt style={[ui.h1, { marginTop: 12 }]}>Your work, moving forward</Txt>
       <Txt style={[ui.muted, { fontSize: 14, marginBottom: 14 }]}>Tasks Saathi is handling for your store</Txt>
-      <Row style={{ gap: 8, marginBottom: 14 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14, marginHorizontal: -16 }} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
         {GROUPS.map((g) => {
           const n = (data ?? []).filter((t) => t.group === g.key).length;
           const on = g.key === group;
@@ -36,7 +36,7 @@ export default function Tasks() {
             </Pressable>
           );
         })}
-      </Row>
+      </ScrollView>
       {loading && !data ? <Loading /> : error && !data ? <ErrorState error={error} onRetry={reload} /> : items.length === 0 ? (
         <Empty icon={group === "NEEDS_APPROVAL" ? "shield-checkmark-outline" : "file-tray-outline"}
           title={group === "NEEDS_APPROVAL" ? "Nothing waiting for you" : "No tasks here yet"}

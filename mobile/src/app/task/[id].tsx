@@ -417,7 +417,7 @@ function ApproveSheet({ visible, task, onClose, onDone }: {
           placeholder="Optional 4-digit PIN"
           keyboardType="number-pad"
           secureTextEntry
-          style={s.pin}
+          style={[s.pin, pin.length > 0 && { letterSpacing: 6 }]}
           placeholderTextColor={colors.muted}
           accessibilityLabel="Optional PIN"
         />
@@ -447,5 +447,5 @@ const s = StyleSheet.create({
   sheet: { backgroundColor: "#fff", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20 },
   grab: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.line, alignSelf: "center", marginBottom: 14 },
   readback: { backgroundColor: colors.bg, borderRadius: radius.md, padding: 14, marginVertical: 14 },
-  pin: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 14, fontSize: 16, marginBottom: 12, color: colors.ink, letterSpacing: 6 },
+  pin: { minHeight: 48, borderWidth: 1, borderColor: colors.line, borderRadius: radius.md, paddingHorizontal: 14, fontSize: 16, marginBottom: 12, color: colors.ink },
 });
