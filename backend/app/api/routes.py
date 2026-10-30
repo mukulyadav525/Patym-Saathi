@@ -1,5 +1,7 @@
+import math
 import uuid
-from decimal import Decimal, InvalidOperation
+from datetime import timedelta
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Header, Query, Request, UploadFile
 from sqlalchemy import select, text
@@ -9,8 +11,8 @@ from app import schemas as s
 from app.adapters import sarvam
 from app.config import get_settings
 from app.db import get_db
-from app.errors import ApiError
-from app.models import Invoice, MerchantMembership, Order, Task, User
+from app.errors import ApiError, parse_money
+from app.models import Invoice, MerchantMembership, Order, Task, User, utcnow
 from app.security import Ctx, current_ctx, hash_password, issue_token, verify_password
 from app.services import approvals, assistant, audit, dues_flow, readback, restock_flow, views
 from app.services.common import move_task
@@ -33,6 +35,17 @@ def health(db: Session = Depends(get_db)) -> s.Health:
                     paytm_mode=settings.paytm_env.upper(), voice="LIVE" if sarvam.enabled() else "OFF")
 
 
+LOGIN_MAX_TRIES = 5
+LOGIN_LOCK = timedelta(minutes=15)
+
+
+def audit_login_lock(db: Session, user: User) -> None:
+    membership = db.scalars(select(MerchantMembership).where(MerchantMembership.user_id == user.id)).first()
+    if membership:
+        audit.record(db, membership.merchant_id, "system", "LOGIN_LOCKED", "user", user.id,
+                     "Sign-in locked for 15 minutes after repeated wrong passwords")
+
+
 def user_out(user: User, role: str) -> s.UserOut:
     return s.UserOut(id=str(user.id), email=user.email, display_name=user.display_name, role=role,
                      has_approval_pin=bool(user.approval_pin_hash))
@@ -40,9 +53,21 @@ def user_out(user: User, role: str) -> s.UserOut:
 
 @api.post("/auth/login", response_model=s.LoginResponse)
 def login(body: s.LoginRequest, db: Session = Depends(get_db)) -> s.LoginResponse:
-    user = db.scalars(select(User).where(User.email == body.email.strip().lower())).first()
+    user = db.scalars(select(User).where(User.email == body.email.strip().lower()).with_for_update()).first()
+    now = utcnow()
+    if user is not None and user.login_locked_until and user.login_locked_until > now:
+        raise ApiError(429, "LOGIN_LOCKED", "Too many wrong passwords. Try again in 15 minutes")
     if user is None or not verify_password(body.password, user.password_hash):
+        if user is not None:
+            user.login_failed_count += 1
+            if user.login_failed_count >= LOGIN_MAX_TRIES:
+                user.login_failed_count, user.login_locked_until = 0, now + LOGIN_LOCK
+                audit_login_lock(db, user)
+            db.commit()
         raise ApiError(401, "BAD_CREDENTIALS", "Email or password is incorrect")
+    if user.login_failed_count or user.login_locked_until:
+        user.login_failed_count, user.login_locked_until = 0, None
+        db.commit()
     membership = db.scalars(select(MerchantMembership).where(MerchantMembership.user_id == user.id,
                                                              MerchantMembership.status == "ACTIVE")).first()
     if membership is None:
@@ -69,7 +94,7 @@ def set_approval_pin(body: s.ApprovalPinRequest, ctx: Ctx = Depends(current_ctx)
                      db: Session = Depends(get_db)) -> s.SimpleResult:
     user = db.get(User, ctx.user.id)
     if not verify_password(body.password, user.password_hash):
-        raise ApiError(401, "BAD_CREDENTIALS", "Password is incorrect")
+        raise ApiError(403, "BAD_PASSWORD", "Password is incorrect")  # not 401: the session itself is fine
     user.approval_pin_hash = hash_password(body.pin) if body.pin else None
     user.pin_failed_count, user.pin_locked_until = 0, None
     audit.record(db, ctx.merchant_id, ctx.actor, "APPROVAL_PIN_SET" if body.pin else "APPROVAL_PIN_CLEARED",
@@ -207,6 +232,40 @@ def payment_link(invoice_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Ses
     return _task_or_404(db, ctx, task.id)
 
 
+@api.post("/invoices/{invoice_id}/recheck", response_model=s.SimpleResult)
+def recheck_invoice(invoice_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.SimpleResult:
+    invoice = _invoice(db, ctx, invoice_id)
+    outcome = dues_flow.recheck_payment(db, invoice, ctx.actor)
+    db.commit()
+    messages = {
+        "PAID": f"{invoice.invoice_number}: payment verified (4/4 checks) and marked paid",
+        "FAILED": f"{invoice.invoice_number}: the payment failed; you can send a new link",
+        "RECONCILIATION_REQUIRED": "Payment details still don't match the invoice; not marked paid",
+        "WAITING": "No payment received for this link yet",
+    }
+    return s.SimpleResult(ok=outcome == "PAID", outcome=outcome, message=messages[outcome])
+
+
+@api.post("/invoices/{invoice_id}/not-received", response_model=s.SimpleResult)
+def invoice_not_received(invoice_id: uuid.UUID, ctx: Ctx = Depends(current_ctx),
+                         db: Session = Depends(get_db)) -> s.SimpleResult:
+    invoice = _invoice(db, ctx, invoice_id)
+    dues_flow.mark_not_received(db, invoice, ctx.actor)
+    db.commit()
+    return s.SimpleResult(ok=True, outcome=invoice.status,
+                          message=f"{invoice.invoice_number} marked not received; you can collect it again")
+
+
+@api.post("/invoices/{invoice_id}/withdraw-link", response_model=s.SimpleResult)
+def withdraw_invoice_link(invoice_id: uuid.UUID, ctx: Ctx = Depends(current_ctx),
+                          db: Session = Depends(get_db)) -> s.SimpleResult:
+    invoice = _invoice(db, ctx, invoice_id)
+    dues_flow.withdraw_link(db, invoice, ctx.actor)
+    db.commit()
+    return s.SimpleResult(ok=True, outcome=invoice.status,
+                          message=f"Link for {invoice.invoice_number} withdrawn; you can create a new one")
+
+
 @api.post("/webhooks/paytm")
 async def paytm_webhook(request: Request, db: Session = Depends(get_db)) -> dict:
     body = await request.body()
@@ -228,8 +287,10 @@ def audit_events(task_id: uuid.UUID | None = None, cursor: str | None = Query(No
                  db: Session = Depends(get_db)) -> s.Page:
     if cursor:
         try:
-            float(cursor)
+            valid = math.isfinite(float(cursor)) and float(cursor) > 0
         except ValueError:
+            valid = False
+        if not valid:
             raise ApiError(400, "BAD_CURSOR", "Invalid cursor")
     return views.audit_page(db, ctx.merchant_id, task_id, cursor, limit)
 
@@ -286,10 +347,7 @@ def demo_payment(invoice_id: uuid.UUID, body: s.SimulatePaymentRequest | None = 
     invoice = _invoice(db, ctx, invoice_id)
     amount = None
     if body and body.amount:
-        try:
-            amount = Decimal(body.amount).quantize(Decimal("0.01"))
-        except InvalidOperation:
-            raise ApiError(422, "BAD_AMOUNT", "Amount must be a number")
+        amount = parse_money(body.amount, "Amount", "0.01", "10000000")
     result = dues_flow.simulate_payment(db, invoice, amount)
     db.commit()
     task = db.scalar(select(Task.id).where(Task.invoice_id == invoice.id).order_by(Task.created_at.desc()).limit(1))

@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 
 import { Txt } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
-import { playBase64 } from "@/lib/voice";
+import { playBase64, stopPlayback } from "@/lib/voice";
 import { colors, radius } from "@/lib/theme";
 
 // "Suno" morning brief: text built on the server from records; spoken by Sarvam Bulbul when configured.
@@ -13,6 +13,7 @@ export function VoiceBrief() {
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  useEffect(() => () => stopPlayback(), []); // leaving the screen stops the brief
 
   const play = async () => {
     setBusy(true);

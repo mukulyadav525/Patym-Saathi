@@ -9,8 +9,8 @@ verified.
 BUILD STATUS (2026-10-30, commit after Paytm-style UI pass)
 - Sections 0-9 are marked from the running build and 48 backend tests.
 - [!] = built, but not verified live: Sarvam STT/Bulbul need SARVAM_API_KEY.
-- Still open: Supabase Auth (backend JWT used; Supabase JWT accepted when
-  SUPABASE_JWT_SECRET is set), Mayura translation (P1), cloud deploy +
+- Supabase hosts Postgres (Singapore); sign-in stays backend JWT by design.
+- Still open: cloud deploy +
   HTTPS (needs Render/Vercel/Supabase accounts), APK test on the actual
   demo phone and a low-end emulator, local `expo run:android` (blocked by
   disk space), backup video.

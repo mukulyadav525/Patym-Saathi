@@ -1,18 +1,19 @@
 """Orchestrator: text/voice -> intent -> workflow. The LLM only proposes; workflows decide."""
 
 import uuid
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import schemas as s
 from app.adapters import sarvam
-from app.errors import ApiError
+from app.errors import ApiError, parse_money
 from app.models import Invoice, Task
 from app.security import Ctx
 from app.services import audit, brief, dues_flow, growth, intent, restock_flow, views
 from app.services.common import move_task, new_correlation_id
+from app.services.states import UNPAID
 
 MIN_BUDGET = Decimal("100")
 MAX_BUDGET = Decimal("500000")
@@ -35,20 +36,14 @@ def new_task(db: Session, ctx: Ctx, task_type: str, title: str, text: str, chann
 
 
 def _budget(value: str) -> Decimal:
-    try:
-        budget = Decimal(value.replace(",", "").replace("₹", "").strip())
-    except InvalidOperation as exc:
-        raise ApiError(422, "BAD_BUDGET", "Budget must be a number") from exc
-    if not MIN_BUDGET <= budget <= MAX_BUDGET:
-        raise ApiError(422, "BAD_BUDGET", f"Budget must be between ₹{MIN_BUDGET:,.0f} and ₹{MAX_BUDGET:,.0f}")
-    return budget.quantize(Decimal("0.01"))
+    return parse_money(value, "Budget", str(MIN_BUDGET), str(MAX_BUDGET))
 
 
 def handle(db: Session, ctx: Ctx, req: s.AssistantRequest, channel: str = "TEXT",
            transcript: str | None = None) -> s.AssistantResponse:
     text = req.text.strip()
     open_invoices = db.scalars(select(Invoice).where(Invoice.merchant_id == ctx.merchant_id,
-                                                     Invoice.status.in_(dues_flow.COLLECTABLE + ("DRAFTED", "SENT")))).all()
+                                                     Invoice.status.in_(UNPAID))).all()
     parsed = intent.parse(text, [i.customer_name for i in open_invoices])
     if parsed.intent == "UNKNOWN" or (parsed.intent == "RESTOCK" and parsed.budget is None):
         parsed = intent.merge_llm_candidate(parsed, sarvam.extract_intent(text))

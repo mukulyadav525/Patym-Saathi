@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { Badge, Button, Card, ErrorBox, SimBadge, Skeleton, StateBadge, useLoad } from "@/components/ui";
 import { api, ApiError, newKey, rupees, when, type TaskDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { copyText } from "@/lib/share";
 
 export default function TaskPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,7 +16,8 @@ export default function TaskPage() {
   const { data: task, setData, error, reload } = useLoad(() => api.task(id), [id], 8000);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNoticeState] = useState<{ ok: boolean; text: string } | null>(null);
+  const setNotice = (text: string | null, ok = false) => setNoticeState(text ? { ok, text } : null);
   const demo = session?.demo_mode && session.user.role === "DEMO_ADMIN";
 
   const act = async (label: string, fn: () => Promise<TaskDetail | void>) => {
@@ -62,7 +64,7 @@ export default function TaskPage() {
           </Card>
         )}
       </div>
-      {notice && <p className="mb-4 rounded-xl bg-red-soft p-3 text-sm text-red">{notice}</p>}
+      {notice && <p className={`mb-4 rounded-xl p-3 text-sm ${notice.ok ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>{notice.text}</p>}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
@@ -141,7 +143,7 @@ export default function TaskPage() {
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                   <SimBadge>{task.invoice.link_mode}</SimBadge>
                   <code className="min-w-0 max-w-full flex-1 truncate rounded bg-bg px-2 py-1 text-xs">{task.invoice.link_url}</code>
-                  <Button kind="secondary" onClick={() => navigator.clipboard?.writeText(task.invoice!.link_url!)}>Copy</Button>
+                  <Button kind="secondary" onClick={() => void copyText(`${task.invoice!.draft_message ?? ""}\n${task.invoice!.link_url}`.trim()).then((ok) => setNotice(ok ? "Message and link copied." : "Couldn't copy. Select the link and copy it manually.", ok))}>Copy</Button>
                 </div>
               )}
               {checks && (
@@ -151,6 +153,29 @@ export default function TaskPage() {
                   {Object.entries({ mid: "Merchant ID", order_id: "Order ID", amount: "Amount", status: "Status = success" }).map(([k, label]) => (
                     <p key={k} className="flex items-center gap-2 text-sm">{checks[k] ? <CheckCircle2 className="size-4 text-green" /> : <XCircle className="size-4 text-red" />} {label}</p>
                   ))}
+                </div>
+              )}
+              {(task.invoice.status === "SENT" || task.invoice.status === "RECONCILIATION_REQUIRED") && (
+                <div className="mt-4 rounded-xl border border-line p-3">
+                  <p className="font-bold">{task.invoice.status === "SENT" ? "Waiting for the customer" : "Payment needs checking"}</p>
+                  <p className="mb-2 text-xs text-muted">
+                    {task.invoice.status === "SENT"
+                      ? "Marked paid only after Paytm confirms it. Customer says they paid? Check again."
+                      : "The payment did not match this invoice. Check again, or mark it not received to collect it again."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button kind="secondary" loading={busy === "recheck"}
+                      onClick={() => act("recheck", async () => { const r = await api.recheckPayment(task.invoice!.id); setNotice(r.message, r.ok); })}>Check again</Button>
+                    {task.invoice.status === "SENT" ? (
+                      <Button kind="danger" loading={busy === "withdraw"} onClick={() => {
+                        if (confirm("Withdraw this link? You can create a new one after.")) void act("withdraw", async () => { setNotice((await api.withdrawLink(task.invoice!.id)).message, true); });
+                      }}>Withdraw link</Button>
+                    ) : (
+                      <Button kind="danger" loading={busy === "notrec"} onClick={() => {
+                        if (confirm("Mark as not received? The invoice becomes collectable again.")) void act("notrec", async () => { setNotice((await api.notReceived(task.invoice!.id)).message, true); });
+                      }}>Not received</Button>
+                    )}
+                  </div>
                 </div>
               )}
               {demo && task.invoice.status === "SENT" && (
@@ -278,6 +303,16 @@ function ConfirmDialog({ task, onClose, onDone, onError, onRenewed }: {
       if (e instanceof ApiError && (e.code === "PIN_INVALID" || e.code === "PIN_REQUIRED")) {
         setPin("");
         setPinError(e.message);
+        return;
+      }
+      if (e instanceof ApiError && e.code === "QUOTE_CHANGED") {
+        // Supplier prices moved since the plan was made: load a fresh plan for the merchant to review.
+        try {
+          onRenewed(await api.renewApproval(task.id));
+          onError("Supplier prices changed since this plan was made. Review the updated plan, then approve.");
+        } catch (e2) {
+          onError(e2 instanceof ApiError ? e2.message : String(e2));
+        }
         return;
       }
       onError(e instanceof ApiError ? e.message : String(e));

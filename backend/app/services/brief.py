@@ -7,8 +7,9 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Invoice, Product, SalesWeekly, SupplierQuote
+from app.models import Invoice, Product, SalesWeekly, SupplierQuote, today_ist
 from app.services.restock import money
+from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
 
 LOW_STOCK_RATIO = Decimal("0.5")  # less than half a week of average demand
@@ -63,10 +64,10 @@ def weekly_sales(db: Session, merchant_id: uuid.UUID) -> list[dict]:
 
 
 def build(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict:
-    today = today or date.today()
+    today = today or today_ist()
     priorities = []
     overdue = db.scalars(select(Invoice).where(
-        Invoice.merchant_id == merchant_id, Invoice.status.in_(("PENDING", "SENT", "DRAFTED")),
+        Invoice.merchant_id == merchant_id, Invoice.status.in_(UNPAID),
         Invoice.due_date < today).order_by(Invoice.due_date)).all()
     if overdue:
         inv = overdue[0]

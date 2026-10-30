@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
-import { createAudioPlayer } from "expo-audio";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Modal, Pressable, Share, StyleSheet, TextInput, View } from "react-native";
@@ -16,6 +15,7 @@ import { api, ApiError, type TaskDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
+import { playBase64, stopPlayback } from "@/lib/voice";
 
 export default function TaskScreen() {
   const { id, review } = useLocalSearchParams<{ id: string; review?: string }>();
@@ -281,6 +281,18 @@ function DuesBlock({ task, onChanged }: { task: TaskDetail; onChanged: () => Pro
     | undefined;
   const demo = session?.demo_mode && session.user.role === "DEMO_ADMIN";
 
+  const act = async (fn: () => Promise<{ message: string }>) => {
+    setBusy(true);
+    try {
+      setResult((await fn()).message);
+    } catch (e) {
+      setResult(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+      await onChanged();
+    }
+  };
+
   return (
     <>
       <Card>
@@ -315,10 +327,41 @@ function DuesBlock({ task, onChanged }: { task: TaskDetail; onChanged: () => Pro
               <Button small kind="secondary" icon="copy-outline" label="Copy" style={{ flex: 1 }}
                 onPress={() => Clipboard.setStringAsync(inv.link_url!)} />
             </Row>
-            <Txt style={[ui.muted, { fontSize: 11, marginTop: 6 }]}>DEMO link: no real money moves. You share it; Saathi doesn’t send messages.</Txt>
+            <Txt style={[ui.muted, { fontSize: 11, marginTop: 6 }]}>
+              {inv.link_mode === "DEMO" ? "DEMO link: no real money moves. " : ""}You share it; Saathi doesn’t send messages.
+            </Txt>
           </View>
         )}
       </Card>
+
+      {(inv.status === "SENT" || inv.status === "RECONCILIATION_REQUIRED") && (
+        <Card>
+          <Txt style={ui.h3}>{inv.status === "SENT" ? "Waiting for the customer" : "Payment needs checking"}</Txt>
+          <Txt style={[ui.muted, { marginTop: 2 }]}>
+            {inv.status === "SENT"
+              ? "Saathi marks it paid only after Paytm confirms it. Customer says they paid? Check again."
+              : "The payment did not match this invoice. Check again, or mark it not received to collect it again."}
+          </Txt>
+          <Row style={{ gap: 8, marginTop: 10 }}>
+            <Button small kind="secondary" icon="refresh" label="Check again" style={{ flex: 1 }} loading={busy}
+              onPress={() => void act(() => api.recheckPayment(inv.id))} />
+            {inv.status === "SENT" ? (
+              <Button small kind="danger" icon="close-circle-outline" label="Withdraw link" style={{ flex: 1 }}
+                onPress={() => Alert.alert("Withdraw this link?", "Use it when the customer won’t pay with this link. You can create a new one after.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Withdraw", style: "destructive", onPress: () => void act(() => api.withdrawLink(inv.id)) },
+                ])} />
+            ) : (
+              <Button small kind="danger" icon="close-circle-outline" label="Not received" style={{ flex: 1 }}
+                onPress={() => Alert.alert("Mark as not received?", "The invoice becomes collectable again. Nothing is sent to the customer.", [
+                  { text: "Cancel", style: "cancel" },
+                  { text: "Not received", style: "destructive", onPress: () => void act(() => api.notReceived(inv.id)) },
+                ])} />
+            )}
+          </Row>
+          {result && <Txt style={[ui.muted, { marginTop: 8, color: colors.inkSoft }]}>{result}</Txt>}
+        </Card>
+      )}
 
       {(inv.status === "PAID" || inv.status === "RECONCILIATION_REQUIRED") && checks && (
         <Card style={{ backgroundColor: inv.status === "PAID" ? colors.greenSoft : colors.redSoft }}>
@@ -371,6 +414,7 @@ function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
   const [busy, setBusy] = useState(false);
   const [left, setLeft] = useState(0);
   const [heard, setHeard] = useState<{ text: string; voice: string } | null>(null);
+  useEffect(() => () => stopPlayback(), []);
   const [listening, setListening] = useState(false);
 
   // Read-back is built on the server from the stored plan/invoice; audio only when Sarvam is configured.
@@ -379,10 +423,7 @@ function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
     try {
       const rb = await api.readback(task.id, "hi-IN", true);
       setHeard({ text: rb.text, voice: rb.voice });
-      if (rb.audio_base64) {
-        const player = createAudioPlayer({ uri: `data:${rb.mime ?? "audio/wav"};base64,${rb.audio_base64}` });
-        player.play();
-      }
+      if (rb.audio_base64) await playBase64(rb.audio_base64, rb.mime ?? "audio/wav");
     } catch (e) {
       setHeard({ text: e instanceof ApiError ? e.message : "Read-back unavailable", voice: "OFF" });
     } finally {
@@ -422,6 +463,17 @@ function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
       if (e instanceof ApiError && (e.code === "PIN_INVALID" || e.code === "PIN_REQUIRED")) {
         setPin("");
         Alert.alert("Wrong PIN", e.message);
+        return;
+      }
+      if (e instanceof ApiError && e.code === "QUOTE_CHANGED") {
+        // Supplier prices moved since the plan was made: fetch a fresh plan and let the merchant review it.
+        try {
+          onRenewed(await api.renewApproval(task.id));
+          Alert.alert("Prices changed", "Supplier prices changed since this plan was made. Review the updated plan, then approve.");
+        } catch (e2) {
+          Alert.alert("Not approved", e2 instanceof ApiError ? e2.message : String(e2));
+        }
+        onClose();
         return;
       }
       Alert.alert("Not approved", e instanceof ApiError ? e.message : String(e));

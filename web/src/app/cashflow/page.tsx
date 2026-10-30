@@ -2,10 +2,10 @@
 
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { Button, Card, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
-import { api, ApiError, rupees } from "@/lib/api";
+import { api, ApiError, rupees, type S } from "@/lib/api";
 
 const short = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
@@ -13,30 +13,6 @@ export default function Cashflow() {
   const [pending, setPending] = useState(true);
   const { data, error, reload } = useLoad(() => api.cashflow(pending), [pending]);
   const settings = useLoad(api.businessSettings);
-  const [cash, setCash] = useState("");
-  const [expenses, setExpenses] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!settings.data) return;
-    setCash(settings.data.cash_on_hand ? String(Math.round(Number(settings.data.cash_on_hand))) : "");
-    setExpenses(settings.data.weekly_expenses ? String(Math.round(Number(settings.data.weekly_expenses))) : "");
-  }, [settings.data]);
-
-  const save = async () => {
-    setBusy(true);
-    setNotice(null);
-    try {
-      await api.saveBusinessSettings({ cash_on_hand: cash || undefined, weekly_expenses: expenses || undefined });
-      void settings.reload();
-      void reload();
-    } catch (e) {
-      setNotice(e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const values = (data?.series ?? []).map((p) => Number(p.balance));
   const max = Math.max(...values.map(Math.abs), 1);
@@ -45,7 +21,6 @@ export default function Cashflow() {
   return (
     <>
       <PageTitle title="Cash flow forecast" sub="Next 14 days from your sales, purchases, dues and expenses. An estimate to plan with, not a bank balance." />
-      {notice && <p className="mb-4 rounded-xl bg-red-soft p-3 text-sm text-red">{notice}</p>}
       {error && !data ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Skeleton /> : (
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
@@ -97,21 +72,53 @@ export default function Cashflow() {
                 <div><p className="text-xs text-muted">Buying/day</p><p className="font-extrabold text-amber">{rupees(data.daily_purchases)}</p></div>
               </div>
             </Card>
-            <Card>
-              <h2 className="mb-3 font-extrabold">Your figures</h2>
-              <label className="text-xs font-bold text-ink-soft" htmlFor="cash">Cash in hand today (₹)</label>
-              <input id="cash" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                className="mt-1 mb-3 h-11 w-full rounded-xl border border-line px-3 outline-cyan" />
-              <label className="text-xs font-bold text-ink-soft" htmlFor="exp">Weekly expenses: rent, salary, bills (₹)</label>
-              <input id="exp" inputMode="numeric" value={expenses} onChange={(e) => setExpenses(e.target.value.replace(/\D/g, "").slice(0, 8))}
-                className="mt-1 mb-4 h-11 w-full rounded-xl border border-line px-3 outline-cyan" />
-              <Button className="w-full" loading={busy} onClick={() => void save()}>Update forecast</Button>
-              {data.missing.map((m) => <p key={m} className="mt-2 text-xs text-amber">{m}</p>)}
-            </Card>
+            {settings.data && (
+              <FiguresForm key={`${settings.data.cash_on_hand}|${settings.data.weekly_expenses}`} initial={settings.data}
+                missing={data.missing} onSaved={() => { void settings.reload(); void reload(); }} />
+            )}
             <div>{data.assumptions.map((a) => <p key={a} className="mb-1 text-xs text-muted">ⓘ {a}</p>)}</div>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+// Keyed on the saved values, so the inputs start from what the server has without copying state in an effect.
+function FiguresForm({ initial, missing, onSaved }: {
+  initial: S["BusinessSettingsOut"]; missing: string[]; onSaved: () => void;
+}) {
+  const whole = (v: string | null) => (v ? String(Math.round(Number(v))) : "");
+  const [cash, setCash] = useState(whole(initial.cash_on_hand));
+  const [expenses, setExpenses] = useState(whole(initial.weekly_expenses));
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const save = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await api.saveBusinessSettings({ cash_on_hand: cash || undefined, weekly_expenses: expenses || undefined });
+      onSaved();
+    } catch (e) {
+      setNotice(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <h2 className="mb-3 font-extrabold">Your figures</h2>
+      <label className="text-xs font-bold text-ink-soft" htmlFor="cash">Cash in hand today (₹)</label>
+      <input id="cash" inputMode="numeric" value={cash} onChange={(e) => setCash(e.target.value.replace(/\D/g, "").slice(0, 8))}
+        className="mt-1 mb-3 h-11 w-full rounded-xl border border-line px-3 outline-cyan" />
+      <label className="text-xs font-bold text-ink-soft" htmlFor="exp">Weekly expenses: rent, salary, bills (₹)</label>
+      <input id="exp" inputMode="numeric" value={expenses} onChange={(e) => setExpenses(e.target.value.replace(/\D/g, "").slice(0, 8))}
+        className="mt-1 mb-4 h-11 w-full rounded-xl border border-line px-3 outline-cyan" />
+      <Button className="w-full" loading={busy} onClick={() => void save()}>Update forecast</Button>
+      {notice && <p className="mt-2 text-xs font-semibold text-red">{notice}</p>}
+      {missing.map((m) => <p key={m} className="mt-2 text-xs text-amber">{m}</p>)}
+    </Card>
   );
 }

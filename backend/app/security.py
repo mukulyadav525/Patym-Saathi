@@ -56,13 +56,10 @@ def _decode(token: str) -> dict:
         return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"], issuer="paytm-saathi")
     except jwt.ExpiredSignatureError as exc:
         raise ApiError(401, "SESSION_EXPIRED", "Session expired, please sign in again") from exc
-    except jwt.InvalidTokenError:
-        if settings.supabase_jwt_secret:
-            try:
-                return jwt.decode(token, settings.supabase_jwt_secret, algorithms=["HS256"], audience="authenticated")
-            except jwt.InvalidTokenError:
-                pass
-        raise ApiError(401, "UNAUTHENTICATED", "Invalid session token")
+    except jwt.InvalidTokenError as exc:
+        # Only tokens this API issued are accepted. (Supabase Auth tokens are deliberately not: anyone can sign
+        # up to a Supabase project, and identifying a merchant by a self-asserted email would allow takeover.)
+        raise ApiError(401, "UNAUTHENTICATED", "Invalid session token") from exc
 
 
 @dataclass

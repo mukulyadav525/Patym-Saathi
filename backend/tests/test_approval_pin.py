@@ -43,7 +43,7 @@ def test_pin_locks_after_five_wrong_tries(client, auth):
 
 
 def test_setting_pin_needs_password_and_four_digits(client, auth):
-    assert client.post("/api/v1/me/approval-pin", json={"password": "wrong", "pin": "1234"}, headers=auth).status_code == 401
+    assert client.post("/api/v1/me/approval-pin", json={"password": "wrong", "pin": "1234"}, headers=auth).status_code == 403
     assert set_pin(client, auth, "12a4").status_code == 422
     set_pin(client, auth, "1234")
     assert set_pin(client, auth, None).status_code == 200

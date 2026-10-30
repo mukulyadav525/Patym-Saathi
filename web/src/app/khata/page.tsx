@@ -6,6 +6,7 @@ import { Fragment, useState } from "react";
 
 import { Badge, Button, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
 import { api, ApiError, rupees } from "@/lib/api";
+import { shareText } from "@/lib/share";
 
 const TONE: Record<string, "green" | "amber" | "red" | "violet"> = { "Pays on time": "green", "Sometimes late": "amber", "Pays late": "red", "New customer": "violet" };
 
@@ -28,8 +29,9 @@ export default function Khata() {
     }
   };
   const remind = async (text: string) => {
-    if (navigator.share) await navigator.share({ text }).catch(() => undefined);
-    else { await navigator.clipboard.writeText(text); setNotice("Reminder copied. Paste it into your message app."); }
+    const how = await shareText(text);
+    if (how === "copied") setNotice("Reminder copied. Paste it into your message app.");
+    if (how === "failed") setNotice("Couldn't share or copy the reminder.");
   };
 
   return (

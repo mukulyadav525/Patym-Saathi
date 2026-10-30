@@ -59,7 +59,7 @@ Use the Supabase Postgres connection string as `DATABASE_URL`, e.g.
 `postgresql+psycopg://postgres.<ref>:<password>@aws-0-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require`
 (Session pooler or direct connection — the API keeps a connection pool, so avoid the transaction pooler).
 Then `npm run seed`. Clients never talk to Supabase directly; RLS is on with no policies, so anon keys see nothing.
-Auth is backend-issued JWT (HS256); `SUPABASE_JWT_SECRET` is also accepted if you move sign-in to Supabase Auth.
+Auth is backend-issued JWT (HS256) only. Supabase is used as the Postgres database, not for sign-in.
 
 ## Android APK
 

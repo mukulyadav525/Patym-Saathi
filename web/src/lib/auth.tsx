@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
 import { api, setToken, setUnauthorizedHandler, type LoginResponse } from "./api";
 
@@ -14,40 +14,62 @@ type Auth = {
 const Ctx = createContext<Auth | null>(null);
 
 // sessionStorage: the session ends with the browser tab; no long-lived token on shared shop PCs.
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [ready, setReady] = useState(false);
-  const [session, setSession] = useState<LoginResponse | null>(null);
+// Read through useSyncExternalStore so the server render (no storage) and the client agree on hydration.
+const listeners = new Set<() => void>();
+let cachedRaw: string | null | undefined;
+let cachedSession: LoginResponse | null = null;
 
-  const signOut = useCallback(() => {
-    sessionStorage.removeItem(KEY);
-    setToken(null);
-    setSession(null);
-  }, []);
+function readSession(): LoginResponse | null {
+  let raw: string | null = null;
+  try {
+    raw = sessionStorage.getItem(KEY);
+  } catch {
+    raw = null; // storage unavailable: signed out
+  }
+  if (raw !== cachedRaw) {
+    cachedRaw = raw;
+    try {
+      cachedSession = raw ? (JSON.parse(raw) as LoginResponse) : null;
+    } catch {
+      cachedSession = null;
+    }
+    setToken(cachedSession?.token ?? null);
+  }
+  return cachedSession;
+}
+
+function writeSession(value: LoginResponse | null) {
+  try {
+    if (value) sessionStorage.setItem(KEY, JSON.stringify(value));
+    else sessionStorage.removeItem(KEY);
+  } catch {
+    /* storage unavailable: session lives in memory for this page only */
+    cachedRaw = value ? JSON.stringify(value) : null;
+    cachedSession = value;
+    setToken(value?.token ?? null);
+  }
+  listeners.forEach((l) => l());
+}
+
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => listeners.delete(l);
+};
+const noop = () => () => {};
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const session = useSyncExternalStore(subscribe, readSession, () => null);
+  const ready = useSyncExternalStore(noop, () => true, () => false);
+
+  const signOut = useCallback(() => writeSession(null), []);
 
   useEffect(() => {
     setUnauthorizedHandler(signOut);
-    try {
-      const saved = sessionStorage.getItem(KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as LoginResponse;
-        setToken(parsed.token);
-        setSession(parsed);
-      }
-    } catch {
-      /* storage unavailable: stay signed out */
-    }
-    setReady(true);
   }, [signOut]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const res = await api.login(email.trim().toLowerCase(), password);
-    setToken(res.token);
-    try {
-      sessionStorage.setItem(KEY, JSON.stringify(res));
-    } catch {
-      /* ignore */
-    }
-    setSession(res);
+    writeSession(res);
   }, []);
 
   const value = useMemo(() => ({ ready, session, signIn, signOut }), [ready, session, signIn, signOut]);

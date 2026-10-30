@@ -14,10 +14,12 @@ from app.errors import ApiError
 from app.models import Approval, Invoice, Merchant, PaymentEvent, Task, utcnow
 from app.services import audit
 from app.services.common import canonical_hash, move_invoice, move_task
+from app.services.states import TERMINAL_TASK, UNPAID  # noqa: F401 (UNPAID re-exported)
 from app.tools import registry
 from app.tools.registry import Caller
 
 COLLECTABLE = ("PENDING", "FAILED", "EXPIRED")
+
 
 
 def draft_message(invoice: Invoice, merchant: Merchant) -> str:
@@ -160,9 +162,19 @@ def process_webhook(db: Session, headers: dict[str, str], body: bytes) -> dict:
         event.processed_at = utcnow()
         return {"outcome": event.outcome}
 
+    outcome, checks, verified = _verify_and_settle(db, adapter, invoice, task, evt.provider_order_id)
+    event.status_api_verified = verified
+    event.processed_at = utcnow()
+    event.outcome = outcome
+    return {"outcome": outcome, "checks": checks}
+
+
+def _verify_and_settle(db: Session, adapter, invoice: Invoice, task: Task | None,
+                       paytm_order_id: str | None) -> tuple[str, dict, bool]:
+    """Server-side status check + the 4-field comparison. The only path that can mark an invoice PAID."""
+    task_id = task.id if task else None
     registry.authorize("check_txn_status", Caller.VERIFICATION)
-    status = adapter.fetch_status(db, invoice.provider_order_id, evt.provider_order_id)
-    event.status_api_verified = status is not None
+    status = adapter.fetch_status(db, invoice.provider_order_id, paytm_order_id)
     merchant = db.get(Merchant, invoice.merchant_id)
     checks = {
         "mid": bool(status) and status.mid == merchant.paytm_mid,
@@ -173,24 +185,69 @@ def process_webhook(db: Session, headers: dict[str, str], body: bytes) -> dict:
     audit.record(db, invoice.merchant_id, "system", "STATUS_CHECKED", "invoice", invoice.id,
                  f"Status API checked: {sum(checks.values())}/4 fields match", task_id=task_id,
                  details={"tool": "check_txn_status", "checks": checks})
-    event.processed_at = utcnow()
-
     if all(checks.values()):
         move_invoice(db, invoice, "VERIFIED", "system", "4 checks passed (MID, order, amount, status)", task_id=task_id)
         mark_paid(db, invoice, task)
-        event.outcome = "PAID"
-    elif status is not None and status.status != SUCCESS and checks["order_id"]:
+        return "PAID", checks, True
+    if status is not None and status.status != SUCCESS and checks["order_id"]:
         move_invoice(db, invoice, "FAILED", "system", f"Payment {status.status}", task_id=task_id)
-        if task:
+        if task and task.state not in TERMINAL_TASK:
             move_task(db, task, "FAILED", "system", "Payment failed")
-        event.outcome = "FAILED"
-    else:
+        return "FAILED", checks, True
+    if invoice.status != "RECONCILIATION_REQUIRED":
         move_invoice(db, invoice, "RECONCILIATION_REQUIRED", "system",
                      "Payment details did not match; not marked paid", task_id=task_id, details={"checks": checks})
-        if task:
-            task.result_note = "Reconciliation required: payment details did not match the invoice"
-        event.outcome = "RECONCILIATION_REQUIRED"
-    return {"outcome": event.outcome, "checks": checks}
+    if task:
+        task.result_note = "Reconciliation required: payment details did not match the invoice"
+    return "RECONCILIATION_REQUIRED", checks, status is not None
+
+
+# ---------- merchant actions on a sent link ----------
+
+def _open_task(db: Session, invoice: Invoice) -> Task | None:
+    return db.scalars(select(Task).where(Task.invoice_id == invoice.id, Task.state.not_in(TERMINAL_TASK))
+                      .order_by(Task.created_at.desc())).first()
+
+
+def recheck_payment(db: Session, invoice: Invoice, actor: str) -> str:
+    """Merchant asks Saathi to check again (e.g. the bank was slow). Same verification path as the webhook."""
+    if invoice.status not in ("SENT", "RECONCILIATION_REQUIRED"):
+        raise ApiError(409, "INVALID_TRANSITION", f"{invoice.invoice_number} is {invoice.status}; nothing to check")
+    paytm_order_id = db.scalar(select(PaymentEvent.provider_order_id).where(PaymentEvent.invoice_id == invoice.id,
+                                                                          PaymentEvent.signature_verified.is_(True))
+                               .order_by(PaymentEvent.received_at.desc()).limit(1))
+    audit.record(db, invoice.merchant_id, actor, "PAYMENT_RECHECK", "invoice", invoice.id,
+                 f"Merchant asked to re-check payment for {invoice.invoice_number}")
+    adapter = get_adapter()
+    if invoice.status == "SENT":
+        # Nothing to verify until the provider has a transaction for this link: report it, change nothing.
+        if paytm_order_id is None and adapter.mode != "DEMO":
+            return "WAITING"
+        if adapter.fetch_status(db, invoice.provider_order_id, paytm_order_id) is None:
+            return "WAITING"
+    outcome, _, _ = _verify_and_settle(db, adapter, invoice, _open_task(db, invoice), paytm_order_id)
+    return outcome
+
+
+def mark_not_received(db: Session, invoice: Invoice, actor: str) -> None:
+    """Merchant confirms the money did not arrive: the invoice becomes collectable again."""
+    if invoice.status != "RECONCILIATION_REQUIRED":
+        raise ApiError(409, "INVALID_TRANSITION", "Only a payment that needs checking can be marked not received")
+    task = _open_task(db, invoice)
+    move_invoice(db, invoice, "FAILED", actor, "Merchant: payment not received", task_id=task.id if task else None)
+    if task:
+        move_task(db, task, "FAILED", actor, "Payment not received; invoice can be collected again")
+
+
+def withdraw_link(db: Session, invoice: Invoice, actor: str) -> None:
+    """Customer never paid: stop using this link so a new one can be created. Nothing is sent to anyone."""
+    if invoice.status != "SENT":
+        raise ApiError(409, "INVALID_TRANSITION", f"{invoice.invoice_number} has no active link")
+    task = _open_task(db, invoice)
+    move_invoice(db, invoice, "EXPIRED", actor, "Merchant withdrew the payment link", task_id=task.id if task else None)
+    if task:
+        task.result_note = "Link withdrawn by merchant; create a new one when ready"
+        move_task(db, task, "FAILED", actor, task.result_note)
 
 
 def mark_paid(db: Session, invoice: Invoice, task: Task | None) -> None:

@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Alert, StyleSheet, Switch, TextInput, View } from "react-native";
 
 import { BalanceChart, SourceNote, Stat } from "@/components/grow";
 import { Button, Card, ErrorState, Loading, Row, Screen, SectionTitle, TopBar, Txt, styles as ui } from "@/components/ui";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type BusinessSettings } from "@/lib/api";
 import { rupees, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
@@ -15,29 +15,6 @@ export default function CashflowScreen() {
   const [pending, setPending] = useState(true);
   const { data, error, loading, refreshing, reload } = useLoad(() => api.cashflow(pending), [pending]);
   const settings = useLoad(api.businessSettings);
-  const [cash, setCash] = useState("");
-  const [expenses, setExpenses] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!settings.data) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCash(settings.data.cash_on_hand ? String(Math.round(Number(settings.data.cash_on_hand))) : "");
-    setExpenses(settings.data.weekly_expenses ? String(Math.round(Number(settings.data.weekly_expenses))) : "");
-  }, [settings.data]);
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await api.saveBusinessSettings({ cash_on_hand: cash || undefined, weekly_expenses: expenses || undefined });
-      settings.reload();
-      reload();
-    } catch (e) {
-      Alert.alert("Not saved", e instanceof ApiError ? e.message : String(e));
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const short_ = data ? Number(data.shortfall) : 0;
   const events = (data?.series ?? []).filter((p) => p.events.length > 0);
@@ -105,20 +82,47 @@ export default function CashflowScreen() {
           )}
 
           <SectionTitle title="Your figures" />
-          <Card>
-            <Txt style={s.label}>Cash in hand today (₹)</Txt>
-            <TextInput value={cash} onChangeText={(t) => setCash(t.replace(/[^\d]/g, "").slice(0, 8))} keyboardType="number-pad"
-              style={s.input} placeholder="e.g. 6000" placeholderTextColor={colors.muted} accessibilityLabel="Cash in hand" />
-            <Txt style={s.label}>Weekly expenses: rent, salary, bills (₹)</Txt>
-            <TextInput value={expenses} onChangeText={(t) => setExpenses(t.replace(/[^\d]/g, "").slice(0, 8))} keyboardType="number-pad"
-              style={s.input} placeholder="e.g. 3500" placeholderTextColor={colors.muted} accessibilityLabel="Weekly expenses" />
-            <Button label="Update forecast" icon="refresh" small loading={saving} onPress={() => void save()} />
-            {data.missing.map((m) => <SourceNote key={m} text={m} />)}
-          </Card>
+          {settings.data && (
+            <FiguresForm key={`${settings.data.cash_on_hand}|${settings.data.weekly_expenses}`} initial={settings.data}
+              missing={data.missing} onSaved={() => { settings.reload(); reload(); }} />
+          )}
           {data.assumptions.map((a) => <SourceNote key={a} text={a} />)}
         </>
       )}
     </Screen>
+  );
+}
+
+// Keyed on the saved values, so inputs start from the server's figures without copying state in an effect.
+function FiguresForm({ initial, missing, onSaved }: { initial: BusinessSettings; missing: string[]; onSaved: () => void }) {
+  const whole = (v: string | null) => (v ? String(Math.round(Number(v))) : "");
+  const [cash, setCash] = useState(whole(initial.cash_on_hand));
+  const [expenses, setExpenses] = useState(whole(initial.weekly_expenses));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveBusinessSettings({ cash_on_hand: cash || undefined, weekly_expenses: expenses || undefined });
+      onSaved();
+    } catch (e) {
+      Alert.alert("Not saved", e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <Txt style={s.label}>Cash in hand today (₹)</Txt>
+      <TextInput value={cash} onChangeText={(t) => setCash(t.replace(/[^\d]/g, "").slice(0, 8))} keyboardType="number-pad"
+        style={s.input} placeholder="e.g. 6000" placeholderTextColor={colors.muted} accessibilityLabel="Cash in hand" />
+      <Txt style={s.label}>Weekly expenses: rent, salary, bills (₹)</Txt>
+      <TextInput value={expenses} onChangeText={(t) => setExpenses(t.replace(/[^\d]/g, "").slice(0, 8))} keyboardType="number-pad"
+        style={s.input} placeholder="e.g. 3500" placeholderTextColor={colors.muted} accessibilityLabel="Weekly expenses" />
+      <Button label="Update forecast" icon="refresh" small loading={saving} onPress={() => void save()} />
+      {missing.map((m) => <SourceNote key={m} text={m} />)}
+    </Card>
   );
 }
 

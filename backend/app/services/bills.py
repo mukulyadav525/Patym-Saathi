@@ -9,7 +9,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.errors import ApiError
+from app.errors import ApiError, parse_money
 from app.models import GoodsReceipt, Inventory, Product, utcnow
 from app.services import audit
 from app.services.restock import money
@@ -33,9 +33,10 @@ MAX_LINES = 60
 
 def _num(s: str) -> Decimal | None:
     try:
-        return Decimal(s.replace(",", ""))
+        value = Decimal(s.replace(",", ""))
     except InvalidOperation:
         return None
+    return value if value.is_finite() else None
 
 
 def _match(line: str, products: list[Product]) -> Product | None:
@@ -101,7 +102,7 @@ def parse_bill_text(text: str, products: list[Product]) -> dict:
         })
         if len(lines_out) >= MAX_LINES:
             break
-    total = sum((Decimal(l["line_total"]) for l in lines_out if l["line_total"]), Decimal("0"))
+    total = sum((Decimal(line["line_total"]) for line in lines_out if line["line_total"]), Decimal("0"))
     return {"supplier_name": supplier, "lines": lines_out, "unmatched": unmatched[:20],
             "total": money(total), "bill_total": f"{money(bill_total):.2f}" if bill_total is not None else None}
 
@@ -142,9 +143,7 @@ def confirm_receipt(db: Session, merchant_id: uuid.UUID, user_id: uuid.UUID, act
         if not 1 <= packs <= 1000:
             raise ApiError(422, "BAD_LINE", f"{product.name}: packs must be 1-1000")
         price = line.get("unit_price")
-        unit_price = money(Decimal(str(price))) if price not in (None, "") else None
-        if unit_price is not None and not Decimal("0") <= unit_price <= Decimal("100000"):
-            raise ApiError(422, "BAD_LINE", f"{product.name}: price looks wrong")
+        unit_price = parse_money(price, f"{product.name} price", "0", "100000") if price not in (None, "") else None
         final.append({"product_id": str(product.id), "name": product.name, "pack_label": product.pack_label,
                       "packs": packs, "unit_price": f"{unit_price:.2f}" if unit_price is not None else None,
                       "line_total": f"{money(unit_price * packs):.2f}" if unit_price is not None else None})
@@ -157,13 +156,13 @@ def confirm_receipt(db: Session, merchant_id: uuid.UUID, user_id: uuid.UUID, act
         inv.on_hand_packs += line["packs"]
         inv.source, inv.source_updated_at, inv.updated_at = "MANUAL", utcnow(), utcnow()
     receipt.lines = final
-    receipt.total = money(sum((Decimal(l["line_total"]) for l in final if l["line_total"]), Decimal("0")))
+    receipt.total = money(sum((Decimal(line["line_total"]) for line in final if line["line_total"]), Decimal("0")))
     if supplier_name is not None:
         receipt.supplier_name = supplier_name.strip()[:120]
     receipt.status, receipt.confirmed_by, receipt.confirmed_at = "CONFIRMED", user_id, utcnow()
     audit.record(db, merchant_id, actor, "GOODS_RECEIVED", "goods_receipt", receipt.id,
-                 f"Bill confirmed: +{sum(l['packs'] for l in final)} packs added to stock"
+                 f"Bill confirmed: +{sum(line['packs'] for line in final)} packs added to stock"
                  + (f" from {receipt.supplier_name}" if receipt.supplier_name else ""),
-                 details={"lines": [{"name": l["name"], "packs": l["packs"]} for l in final]})
+                 details={"lines": [{"name": line["name"], "packs": line["packs"]} for line in final]})
     db.commit()
     return receipt

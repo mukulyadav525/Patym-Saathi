@@ -90,8 +90,8 @@ class DemoPaytmAdapter:
     def parse_webhook(self, headers: dict[str, str], body: bytes) -> tuple[bool, WebhookEvent]:
         try:
             data = json.loads(body)
-        except ValueError:
-            raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not JSON")
+        except ValueError as exc:
+            raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not JSON") from exc
         if not isinstance(data, dict):
             raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not an object")
         event = WebhookEvent(
@@ -192,8 +192,8 @@ class StagingPaytmAdapter:
         if text.lstrip().startswith("{"):
             try:
                 data = json.loads(text)
-            except ValueError:
-                raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not JSON")
+            except ValueError as exc:
+                raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not JSON") from exc
         else:
             data = dict(parse_qsl(text, keep_blank_values=True))
         if not isinstance(data, dict):

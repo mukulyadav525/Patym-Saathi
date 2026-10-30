@@ -2,7 +2,7 @@
 proactive scan, bills. Read endpoints compute from records; writes only draft or record merchant actions."""
 
 import uuid
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func, select
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app import schemas as s
 from app.adapters import sarvam
 from app.db import get_db
-from app.errors import ApiError
+from app.errors import ApiError, parse_money
 from app.models import GoodsReceipt, Invoice, Offer, Product, Task
 from app.security import Ctx, current_ctx
 from app.services import audit, bills, dues_flow, growth
@@ -22,12 +22,7 @@ ALLOWED_BILL_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic", "ap
 
 
 def _money(value: str | None, field: str) -> Decimal | None:
-    if value in (None, ""):
-        return None
-    try:
-        return Decimal(value.replace(",", "").replace("₹", "").strip())
-    except InvalidOperation as exc:
-        raise ApiError(422, "BAD_AMOUNT", f"{field} must be a number") from exc
+    return None if value in (None, "") else parse_money(value, field)
 
 
 def _offer_out(offer: Offer, product: Product) -> s.OfferOut:

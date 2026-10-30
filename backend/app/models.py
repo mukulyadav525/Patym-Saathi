@@ -1,7 +1,7 @@
 """Database models. Money is NUMERIC(12,2) / Decimal everywhere; timestamps are UTC."""
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -25,6 +25,14 @@ Money = Numeric(12, 2)
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def today_ist() -> date:
+    """The merchant's calendar date. Servers run in UTC; Indian shops close their day in IST."""
+    return datetime.now(IST).date()
 
 
 def pk() -> Mapped[uuid.UUID]:
@@ -67,6 +75,9 @@ class User(Base):
     approval_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pin_failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     pin_locked_until: Mapped[datetime | None] = ts(nullable=True)
+    # Password guessing protection: 5 wrong passwords lock sign-in for 15 minutes.
+    login_failed_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    login_locked_until: Mapped[datetime | None] = ts(nullable=True)
     created_at: Mapped[datetime] = ts()
 
 
@@ -194,6 +205,7 @@ class Plan(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (UniqueConstraint("merchant_id", "reference", name="uq_orders_merchant_reference"),)
     id: Mapped[uuid.UUID] = pk()
     merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
     task_id: Mapped[uuid.UUID] = fk("tasks.id")

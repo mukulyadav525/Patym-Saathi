@@ -10,9 +10,11 @@ export function useOnline() {
   return online;
 }
 
-/** Loads data on focus; keeps the last good data visible when a refresh fails (weak connectivity). */
+/** Loads data on focus; keeps the last good data visible when a refresh fails (weak connectivity).
+ * A response that arrives after a newer load started (or after the caller set data itself, e.g. the
+ * result of an approval) is dropped, so stale data never overwrites fresh. */
 export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setDataState] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -20,26 +22,41 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   useLayoutEffect(() => {
     loaderRef.current = loader;
   });
+  const seq = useRef(0);
+  const depKey = JSON.stringify(deps);
 
   const run = useCallback(async (mode: "initial" | "refresh" = "initial") => {
+    const mine = ++seq.current;
     if (mode === "refresh") setRefreshing(true);
     try {
-      setData(await loaderRef.current());
-      setError(null);
+      const value = await loaderRef.current();
+      if (mine === seq.current) {
+        setDataState(value);
+        setError(null);
+      }
     } catch (e) {
-      setError(e instanceof ApiError ? e : new ApiError(0, "ERROR", String(e)));
+      if (mine === seq.current) setError(e instanceof ApiError ? e : new ApiError(0, "ERROR", String(e)));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (mine === seq.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
-    // Callers pass their own deps (e.g. a task id); the loader itself is read through a ref.
-    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/use-memo
-  }, deps);
+  }, []);
+
+  const setData = useCallback((value: T | null) => {
+    seq.current += 1; // anything still in flight is now older than this
+    setDataState(value);
+    setLoading(false);
+    setRefreshing(false);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       void run();
-    }, [run]),
+      // Re-run on focus and whenever the caller's deps change (compared by value).
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [run, depKey]),
   );
 
   return { data, setData, error, loading, refreshing, reload: () => run("refresh") };

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.errors import ApiError
-from app.models import Approval, IdempotencyRecord, Task, User, utcnow
+from app.models import Approval, IdempotencyRecord, Plan, Task, User, utcnow
 from app.security import Ctx, verify_password
 from app.services import audit, dues_flow, restock_flow
 from app.tools import registry
@@ -66,6 +66,17 @@ def check_pin(db: Session, ctx: Ctx, pin: str | None) -> None:
     raise ApiError(403, "PIN_INVALID", "Wrong approval PIN")
 
 
+def _completed_record(db: Session, ctx: Ctx, key: str, request_hash: str) -> uuid.UUID | None:
+    rec = db.scalars(select(IdempotencyRecord).where(
+        IdempotencyRecord.merchant_id == ctx.merchant_id, IdempotencyRecord.operation == OPERATION,
+        IdempotencyRecord.key == key)).first()
+    if rec is None:
+        return None
+    if rec.request_hash != request_hash:
+        raise ApiError(409, "IDEMPOTENCY_KEY_REUSED", "Idempotency key already used for another request")
+    return uuid.UUID(rec.result_ref) if rec.status == "COMPLETED" and rec.result_ref else None
+
+
 def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str, pin: str | None = None) -> uuid.UUID:
     if not idempotency_key or len(idempotency_key) > 120:
         raise ApiError(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required")
@@ -81,6 +92,11 @@ def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str,
 
     check_pin(db, ctx, pin)
     approval = _load(db, ctx, approval_id)  # row lock serialises concurrent confirms
+    # A retry of the same tap may have waited on the lock while the first request completed: answer it with
+    # the same result instead of "already used".
+    done = _completed_record(db, ctx, idempotency_key, request_hash)
+    if done is not None:
+        return done
     _check_usable(db, approval)
     if approval.action_type == "SUPPLIER_ORDER":
         current_hash = restock_flow.recompute_hash(db, approval)
@@ -139,8 +155,19 @@ def renew(db: Session, ctx: Ctx, task_id: uuid.UUID) -> uuid.UUID:
     if task.state != "AWAITING_APPROVAL" or old is None:
         raise ApiError(409, "INVALID_TRANSITION", "Nothing is waiting for approval on this task")
     now = utcnow()
-    if old.status == "PENDING" and old.expires_at > now:
+    stale_quotes = False
+    if old.action_type == "SUPPLIER_ORDER":
+        plan = db.get(Plan, old.plan_id)
+        stale_quotes = plan is not None and plan.status == "ACTIVE" and restock_flow.quotes_stale(db, plan)
+    if old.status == "PENDING" and old.expires_at > now and not stale_quotes:
         return task.id  # still valid; nothing to renew
+    if old.action_type == "SUPPLIER_ORDER":
+        plan = db.get(Plan, old.plan_id)
+        if plan is not None and plan.status == "ACTIVE" and restock_flow.quotes_stale(db, plan):
+            # Same request, but supplier prices moved on: new plan, new approval (old one is superseded).
+            restock_flow.refresh_plan(db, task, ctx.actor)
+            db.commit()
+            return task.id
     current = (restock_flow.recompute_hash(db, old) if old.action_type == "SUPPLIER_ORDER"
                else dues_flow.recompute_hash(db, old))
     if current != old.payload_hash:

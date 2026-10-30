@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     # Auth: backend-issued JWT (HS256). Supabase JWT secret is accepted too when set.
     jwt_secret: str = "dev-only-change-me-0123456789abcdef"
     jwt_ttl_minutes: int = 720
-    supabase_jwt_secret: str | None = None
 
     # Demo controls
     demo_mode: bool = True

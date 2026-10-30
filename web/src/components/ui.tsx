@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/lib/api";
 
@@ -99,25 +99,40 @@ export function Skeleton({ rows = 4 }: { rows?: number }) {
   );
 }
 
-/** Load on mount + every `pollMs`; keeps last good data on failure. */
+/** Load on mount + every `pollMs`; keeps last good data on failure. Responses that arrive after a newer
+ * request was started (deps changed, poll overlapped) are dropped so stale data never overwrites fresh. */
 export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = [], pollMs = 0) {
-  const [data, setData] = useState<T | null>(null);
+  const [data, setDataState] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const loaderRef = useRef(loader);
+  useLayoutEffect(() => {
+    loaderRef.current = loader;
+  });
+  const seq = useRef(0);
+  const depKey = JSON.stringify(deps);
   const run = useCallback(async () => {
+    const mine = ++seq.current;
     try {
-      setData(await loader());
+      const value = await loaderRef.current();
+      if (mine !== seq.current) return;
+      setDataState(value);
       setError(null);
     } catch (e) {
+      if (mine !== seq.current) return;
       setError(e instanceof ApiError ? e : new ApiError(0, "ERROR", String(e)));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, []);
+  // Data set by the caller (e.g. an approval result) wins over any load still in flight.
+  const setData = useCallback((value: T | null) => {
+    seq.current += 1;
+    setDataState(value);
+  }, []);
+  // Re-run when the caller's deps change (compared by value) or the poll interval changes.
   useEffect(() => {
     void run();
     if (!pollMs) return;
     const t = setInterval(() => void run(), pollMs);
     return () => clearInterval(t);
-  }, [run, pollMs]);
+  }, [run, pollMs, depKey]);
   return { data, setData, error, reload: run };
 }

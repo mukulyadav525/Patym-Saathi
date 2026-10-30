@@ -12,6 +12,7 @@ from app.adapters import sarvam
 from app.config import get_settings
 from app.db import Base, SessionLocal
 from app.models import (
+    today_ist,
     DataConnection,
     Inventory,
     Invoice,
@@ -45,7 +46,7 @@ def _merchant(db: Session, spec: dict, role: str) -> Merchant:
 
 
 def reset(db: Session, today: date | None = None) -> None:
-    today = today or date.today()
+    today = today or today_ist()
     tables = ", ".join(t.name for t in Base.metadata.sorted_tables)
     db.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
     db.expunge_all()
@@ -70,7 +71,7 @@ def reset(db: Session, today: date | None = None) -> None:
             db.add(product)
             db.flush()
             db.add(Inventory(merchant_id=owner.id, product_id=product.id, on_hand_packs=stock, source="SAMPLE"))
-            for week_start, sold in zip(week_starts, sales):
+            for week_start, sold in zip(week_starts, sales, strict=True):
                 db.add(SalesWeekly(merchant_id=owner.id, product_id=product.id, week_start=week_start,
                                    packs_sold=sold, source="SAMPLE"))
             event_packs, baseline = fx.FESTIVAL_SALES[sku]
@@ -126,6 +127,12 @@ def reset(db: Session, today: date | None = None) -> None:
 
 
 if __name__ == "__main__":
+    import sys
+
     with SessionLocal() as session:
-        reset(session)
-    print("Seeded demo data.")
+        # --if-empty: used on boot in deployed demo environments, so a restart never wipes real data.
+        if "--if-empty" in sys.argv and session.query(Merchant.id).first() is not None:
+            print("Database already has data; seed skipped.")
+        else:
+            reset(session)
+            print("Seeded demo data.")

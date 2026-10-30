@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Badge, Button, Card, Empty, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
 import { api, ApiError, rupees, when, type S } from "@/lib/api";
+import { copyText, shareText } from "@/lib/share";
 
 const LANGS = [["hi-IN", "Hinglish"], ["en-IN", "English"], ["ta-IN", "தமிழ்"], ["bn-IN", "বাংলা"], ["mr-IN", "मराठी"], ["gu-IN", "ગુજરાતી"], ["te-IN", "తెలుగు"], ["kn-IN", "ಕನ್ನಡ"]];
 
@@ -48,8 +49,9 @@ export default function Offers() {
   };
   const share = async () => {
     if (!active) return;
-    if (navigator.share) await navigator.share({ text }).catch(() => undefined);
-    else await navigator.clipboard.writeText(text);
+    const how = await shareText(text);
+    if (how === "failed") return setNotice("Couldn't share or copy. Select the message and copy it manually.");
+    if (how === "copied") setNotice("Offer copied. Paste it into your message app.");
     await api.offerShared(active.id).catch(() => undefined);
     void offers.reload();
   };
@@ -57,7 +59,7 @@ export default function Offers() {
   return (
     <>
       <PageTitle title="Slow stock → offers" sub="Items that stopped selling tie up cash. Saathi drafts the offer; you share it. Saathi never messages customers." />
-      {notice && <p className="mb-4 rounded-xl bg-red-soft p-3 text-sm text-red">{notice}</p>}
+      {notice && <p className="mb-4 rounded-xl bg-cyan-soft p-3 text-sm text-navy">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">
           {slow.error && !slow.data ? <ErrorBox error={slow.error} onRetry={slow.reload} /> : !slow.data ? <Skeleton /> :
@@ -106,7 +108,7 @@ export default function Offers() {
               <p className={`mt-3 rounded-xl bg-[#F2FBFF] p-3 text-sm leading-relaxed ${busy === "lang" ? "opacity-40" : ""}`}>{text}</p>
               <p className="mt-1 text-[11px] text-muted">{lang === "hi-IN" ? "Drafted by Saathi from your prices." : "Translated; check before sharing."}</p>
               <div className="mt-3 flex gap-2">
-                <Button kind="secondary" className="flex-1" onClick={() => void navigator.clipboard.writeText(text)}><Copy className="size-4" /> Copy</Button>
+                <Button kind="secondary" className="flex-1" onClick={() => void copyText(text).then((ok) => setNotice(ok ? "Offer copied." : "Couldn't copy. Select the message and copy it manually."))}><Copy className="size-4" /> Copy</Button>
                 <Button className="flex-1" onClick={() => void share()}><Share2 className="size-4" /> Share</Button>
               </div>
             </Card>

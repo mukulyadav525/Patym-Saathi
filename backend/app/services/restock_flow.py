@@ -15,6 +15,7 @@ from app.errors import ApiError
 from app.models import (
     Approval,
     Inventory,
+    Merchant,
     Order,
     OrderLine,
     Plan,
@@ -197,7 +198,7 @@ def draft_plan(
             committed=committed, resource_only=resource_only, uplift=uplifts or None, festival_name=festival_name,
         )
     except BudgetExceeded as exc:
-        raise ApiError(422, "BUDGET_EXCEEDED", str(exc), {"total": f"{exc.total:.2f}", "budget": f"{exc.budget:.2f}"})
+        raise ApiError(422, "BUDGET_EXCEEDED", str(exc), {"total": f"{exc.total:.2f}", "budget": f"{exc.budget:.2f}"}) from exc
 
     previous = db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version.desc())).first()
     version = (previous.version + 1) if previous else 1
@@ -255,6 +256,40 @@ def start_restock(db: Session, task: Task, actor: str, budget: Decimal) -> Plan:
     return plan
 
 
+def quotes_stale(db: Session, plan: Plan) -> bool:
+    """True if any not-yet-ordered line's quote expired or changed price since the plan was drafted."""
+    now = utcnow()
+    for line in plan.payload["lines"]:
+        if line["status"] != "NEW":
+            continue
+        quote = db.get(SupplierQuote, uuid.UUID(line["quote_id"]))
+        if quote is None or quote.valid_until <= now or money(quote.unit_price) != Decimal(line["unit_price"]):
+            return True
+    return False
+
+
+def refresh_plan(db: Session, task: Task, actor: str) -> Plan:
+    """Re-draft the same request with fresh supplier quotes (keeps anything already ordered) and ask for a new
+    approval. Used when the approved plan's quotes went stale before it was executed."""
+    current = db.scalars(select(Plan).where(Plan.task_id == task.id, Plan.status == "ACTIVE")).first()
+    if current is None:
+        raise ApiError(409, "INVALID_TRANSITION", "No active plan to refresh")
+    committed = _committed_lines(db, task)
+    resource_only = None
+    if committed:  # second-approval stage: only re-price what is not ordered yet
+        resource_only = defaultdict(int)
+        for line in current.payload["lines"]:
+            if line["status"] == "NEW":
+                resource_only[line["product_id"]] += line["packs"]
+        resource_only = dict(resource_only)
+    move_task(db, task, "PLAN_DRAFTED", actor, "Supplier quotes changed; drafting a fresh plan")
+    plan = draft_plan(db, task, actor, current.budget, "Fresh supplier quotes", committed=committed or None,
+                      resource_only=resource_only)
+    request_approval(db, task, plan)
+    move_task(db, task, "AWAITING_APPROVAL", "saathi", "Waiting for merchant approval")
+    return plan
+
+
 def recompute_hash(db: Session, approval: Approval) -> str:
     plan = db.get(Plan, approval.plan_id)
     task = db.get(Task, approval.task_id)
@@ -302,7 +337,8 @@ def execute_order(db: Session, task: Task, approval: Approval, actor: str) -> di
     for line in new_lines:
         quote = db.get(SupplierQuote, uuid.UUID(line["quote_id"]))
         if quote is None or quote.valid_until <= now or money(quote.unit_price) != Decimal(line["unit_price"]):
-            raise ApiError(409, "QUOTE_CHANGED", f"Quote for {line['name']} changed; re-plan needed")
+            raise ApiError(409, "QUOTE_CHANGED", f"Supplier price for {line['name']} changed. Tap Renew to get a "
+                                                 "fresh plan with today's prices.")
 
     move_task(db, task, "APPROVED", actor, f"Merchant approved ₹{plan.total:,.2f} (plan v{plan.version})")
     move_task(db, task, "EXECUTING", "saathi", "Placing supplier orders")
@@ -313,6 +349,8 @@ def execute_order(db: Session, task: Task, approval: Approval, actor: str) -> di
 
     unavailable: dict[str, int] = {}
     shortage_notes = []
+    # Serialise PO numbering per merchant (two tasks approved at the same moment must not share a number).
+    db.execute(select(Merchant.id).where(Merchant.id == task.merchant_id).with_for_update())
     for supplier_id, lines in sorted(by_supplier.items(), key=lambda kv: kv[1][0]["supplier_name"]):
         supplier = db.get(Supplier, uuid.UUID(supplier_id))
         count = db.scalar(select(func.count(Order.id)).where(Order.merchant_id == task.merchant_id))
@@ -372,6 +410,7 @@ def replan_after_shortage(db: Session, task: Task, old_plan: Plan, unavailable: 
     except ApiError as exc:
         task.result_note = f"Could not re-source within budget: {exc.message}"
         move_task(db, task, "VERIFYING", "saathi", task.result_note)
+        settle_if_done(db, task, "saathi")  # e.g. the only order failed outright
         return {"shortage": True, "replanned": False}
 
     diff = []
@@ -398,11 +437,36 @@ def replan_after_shortage(db: Session, task: Task, old_plan: Plan, unavailable: 
 def reject(db: Session, task: Task, approval: Approval, actor: str) -> None:
     plan = db.get(Plan, approval.plan_id)
     plan.status = "REJECTED"
-    if committed_spend(db, task.id) > 0:
-        task.result_note = f"Revised plan rejected; continuing with ₹{committed_spend(db, task.id):,.2f} already ordered"
+    committed = committed_spend(db, task.id)
+    if committed > 0:
+        task.result_note = f"Revised plan rejected; continuing with ₹{committed:,.2f} already ordered"
         move_task(db, task, "VERIFYING", actor, task.result_note)
+        settle_if_done(db, task, actor)  # goods may already have arrived
     else:
         move_task(db, task, "CANCELLED", actor, "Merchant rejected the plan")
+
+
+def settle_if_done(db: Session, task: Task, actor: str) -> None:
+    """Close a restock task that is only waiting on deliveries once nothing is open: no accepted order
+    waiting for goods and no pending approval. Called after deliveries, rejections and failed re-plans,
+    so a task can never be left in VERIFYING with nothing to wait for."""
+    if task.state != "VERIFYING":
+        return
+    if db.scalar(select(Order.id).where(Order.task_id == task.id, Order.status.in_(OPEN_ORDER_STATES)).limit(1)):
+        return
+    if db.scalar(select(Approval.id).where(Approval.task_id == task.id, Approval.status == "PENDING").limit(1)):
+        return
+    spent = committed_spend(db, task.id)
+    received = db.scalar(select(func.count(Order.id)).where(Order.task_id == task.id, Order.status == "GOODS_RECEIVED"))
+    if not received:
+        task.result_note = (task.result_note + ". " if task.result_note else "") + "No goods were ordered"
+        move_task(db, task, "FAILED", actor, task.result_note)
+        return
+    budget = db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version.desc())).first().budget
+    partial = bool(task.result_note)
+    note = f"Final spend ₹{spent:,.2f}: ₹{budget - spent:,.2f} under the ₹{budget:,.2f} limit"
+    task.result_note = f"{task.result_note}. {note}" if partial else note
+    move_task(db, task, "PARTIALLY_COMPLETED" if partial else "COMPLETED", "saathi", note)
 
 
 def receive_goods(db: Session, order: Order, actor: str) -> int:
@@ -420,14 +484,5 @@ def receive_goods(db: Session, order: Order, actor: str) -> int:
     move_order(db, order, "GOODS_RECEIVED", actor, f"{order.reference}: {received} packs received (simulated delivery)",
                details={"packs": received})
 
-    task = db.get(Task, order.task_id)
-    open_orders = db.scalars(select(Order).where(Order.task_id == task.id, Order.status.in_(OPEN_ORDER_STATES))).all()
-    pending_approval = db.scalars(select(Approval).where(Approval.task_id == task.id, Approval.status == "PENDING")).first()
-    if task.state == "VERIFYING" and not open_orders and not pending_approval:
-        spent = committed_spend(db, task.id)
-        budget = db.scalars(select(Plan).where(Plan.task_id == task.id).order_by(Plan.version.desc())).first().budget
-        partial = bool(task.result_note)
-        note = f"Final spend ₹{spent:,.2f}: ₹{budget - spent:,.2f} under the ₹{budget:,.2f} limit"
-        task.result_note = f"{task.result_note}. {note}" if partial else note
-        move_task(db, task, "PARTIALLY_COMPLETED" if partial else "COMPLETED", "saathi", note)
+    settle_if_done(db, db.get(Task, order.task_id), actor)
     return received

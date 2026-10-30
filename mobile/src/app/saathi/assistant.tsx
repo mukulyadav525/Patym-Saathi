@@ -1,8 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder } from "expo-audio";
 import * as Haptics from "expo-haptics";
-import { router, useLocalSearchParams, type Href } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View,
   type ScrollViewInstance, type TextInputInstance,
@@ -96,11 +96,33 @@ export default function Assistant() {
     void handle(() => api.ask(t, confirmedBudget), t);
   };
 
+  // Leaving the screen (tabs stay mounted) must never leave the microphone on: stop and discard.
+  const recordingRef = useRef(false);
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+  useFocusEffect(
+    useCallback(() => () => {
+      if (!recordingRef.current) return;
+      recordingRef.current = false;
+      setRecording(false);
+      void recorder.stop().catch(() => undefined);
+      void setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+    }, [recorder]),
+  );
+
   async function toggleMic() {
     if (busy) return;
     if (recording) {
       setRecording(false);
-      await recorder.stop();
+      try {
+        await recorder.stop();
+      } catch {
+        push({ id: id(), from: "saathi", at: now(), text: "Recording failed. Please try again or type.", error: true });
+        return;
+      } finally {
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+      }
       const uri = recorder.uri;
       if (!uri) return;
       const form = new FormData();
@@ -118,9 +140,16 @@ export default function Assistant() {
       inputRef.current?.focus();
       return;
     }
-    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-    await recorder.prepareToRecordAsync();
-    recorder.record();
+    try {
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await recorder.prepareToRecordAsync();
+      recorder.record();
+    } catch {
+      // Mic busy (a call, another app) or the recorder failed to start: say so and fall back to typing.
+      push({ id: id(), from: "saathi", at: now(), text: "Couldn't start the microphone. Please type your request below.", error: true });
+      inputRef.current?.focus();
+      return;
+    }
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
     setRecording(true);
   }

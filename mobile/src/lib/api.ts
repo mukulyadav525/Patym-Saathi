@@ -60,10 +60,16 @@ export function setUnauthorizedHandler(handler: () => void) {
 }
 
 const TIMEOUT_MS = 15000;
+const SESSION_ERRORS = new Set(["UNAUTHENTICATED", "SESSION_EXPIRED"]);
+// Calls that wait on Sarvam (speech, translation, document reading) or plan building get more time, so the
+// app never reports a timeout for work the server then completes.
+const SLOW_MS = 45000;
+const BILL_MS = 75000;
 
-async function request<T>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+async function request<T>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {},
+  timeoutMs = TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
@@ -83,9 +89,17 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
     clearTimeout(timer);
   }
   const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // A proxy or host error page (HTML), e.g. a 502 during a deploy.
+    if (res.ok) throw new ApiError(res.status, "BAD_RESPONSE", "Unexpected response from the server");
+    throw new ApiError(res.status, "SERVER_UNAVAILABLE", "Saathi is temporarily unavailable. Please try again.");
+  }
   if (!res.ok) {
-    if (res.status === 401 && onUnauthorized) onUnauthorized();
+    // Only a dead session signs the user out; a wrong password on a form (also 401) must not.
+    if (res.status === 401 && onUnauthorized && SESSION_ERRORS.has(data?.code)) onUnauthorized();
     throw new ApiError(res.status, data?.code ?? "ERROR", data?.message ?? "Something went wrong", data?.details ?? {});
   }
   return data as T;
@@ -107,22 +121,25 @@ export const api = {
   connections: () => request<Connection[]>("GET", "/api/v1/connections"),
   audit: (cursor?: string) => request<S["Page"]>("GET", `/api/v1/audit?limit=50${cursor ? `&cursor=${cursor}` : ""}`),
   ask: (text: string, confirmed_budget?: string) =>
-    request<AssistantResponse>("POST", "/api/v1/assistant/message", { text, confirmed_budget }),
+    request<AssistantResponse>("POST", "/api/v1/assistant/message", { text, confirmed_budget }, {}, SLOW_MS),
   askVoiceLang: (form: FormData, language: string) =>
-    request<AssistantResponse>("POST", `/api/v1/assistant/voice?language=${encodeURIComponent(language)}`, form),
+    request<AssistantResponse>("POST", `/api/v1/assistant/voice?language=${encodeURIComponent(language)}`, form, {}, SLOW_MS),
   // One key per tap sequence: a retry of the same tap reuses it so it can never double-order.
   confirm: (approvalId: string, key: string = newKey(), pin?: string) =>
     request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined,
-      pin ? { "Idempotency-Key": key, "X-Approval-Pin": pin } : { "Idempotency-Key": key }),
+      pin ? { "Idempotency-Key": key, "X-Approval-Pin": pin } : { "Idempotency-Key": key }, SLOW_MS),
   setApprovalPin: (password: string, pin: string | null) =>
     request<SimpleResult>("POST", "/api/v1/me/approval-pin", { password, pin }),
   reject: (approvalId: string) => request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/reject`),
   readback: (taskId: string, lang: "hi-IN" | "en-IN", audio = false) =>
-    request<S["ReadbackOut"]>("GET", `/api/v1/tasks/${taskId}/readback?lang=${lang}&audio=${audio}`),
+    request<S["ReadbackOut"]>("GET", `/api/v1/tasks/${taskId}/readback?lang=${lang}&audio=${audio}`, undefined, {}, SLOW_MS),
   renewApproval: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/renew-approval`),
   replan: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/replan`),
+  recheckPayment: (invoiceId: string) => request<SimpleResult>("POST", `/api/v1/invoices/${invoiceId}/recheck`),
+  notReceived: (invoiceId: string) => request<SimpleResult>("POST", `/api/v1/invoices/${invoiceId}/not-received`),
+  withdrawLink: (invoiceId: string) => request<SimpleResult>("POST", `/api/v1/invoices/${invoiceId}/withdraw-link`),
   paymentLink: (invoiceId: string) => request<TaskDetail>("POST", `/api/v1/invoices/${invoiceId}/payment-link`),
-  demoReset: () => request<SimpleResult>("POST", "/api/v1/demo/reset"),
+  demoReset: () => request<SimpleResult>("POST", "/api/v1/demo/reset", undefined, {}, SLOW_MS),
   demoDelivery: (taskId: string) => request<TaskDetail>("POST", `/api/v1/demo/tasks/${taskId}/simulate-delivery`),
   demoPayment: (invoiceId: string, amount?: string) =>
     request<SimpleResult>("POST", `/api/v1/demo/simulate-payment/${invoiceId}`, amount ? { amount } : {}),
@@ -130,7 +147,7 @@ export const api = {
   festival: () => request<Festival | null>("GET", "/api/v1/growth/festival"),
   impact: () => request<Impact>("GET", "/api/v1/growth/impact"),
   briefSpeech: (lang: string, audio: boolean) =>
-    request<Speech>("GET", `/api/v1/brief/speech?lang=${lang}&audio=${audio}`),
+    request<Speech>("GET", `/api/v1/brief/speech?lang=${lang}&audio=${audio}`, undefined, {}, SLOW_MS),
   languages: () => request<Language[]>("GET", "/api/v1/languages"),
   slowMovers: () => request<SlowMover[]>("GET", "/api/v1/growth/slow-movers"),
   offers: () => request<Offer[]>("GET", "/api/v1/offers"),
@@ -138,17 +155,17 @@ export const api = {
     request<Offer>("POST", "/api/v1/offers", { product_id: productId, discount_pct: discount }),
   offerShared: (id: string) => request<Offer>("POST", `/api/v1/offers/${id}/shared`),
   translate: (kind: "OFFER" | "INVOICE" | "KHATA", ref: string, target: string) =>
-    request<S["TranslateOut"]>("POST", "/api/v1/translate", { kind, ref, target }),
+    request<S["TranslateOut"]>("POST", "/api/v1/translate", { kind, ref, target }, {}, SLOW_MS),
   khata: () => request<Khata>("GET", "/api/v1/khata"),
   cashflow: (includePending = true) => request<Cashflow>("GET", `/api/v1/cashflow?include_pending=${includePending}`),
   businessSettings: () => request<BusinessSettings>("GET", "/api/v1/settings/business"),
   saveBusinessSettings: (body: { cash_on_hand?: string; weekly_expenses?: string; default_restock_budget?: string }) =>
     request<BusinessSettings>("POST", "/api/v1/settings/business", body),
   benchmarks: () => request<Benchmarks>("GET", "/api/v1/benchmarks"),
-  scan: () => request<Scan>("POST", "/api/v1/agent/scan"),
+  scan: () => request<Scan>("POST", "/api/v1/agent/scan", undefined, {}, SLOW_MS),
   bills: () => request<Receipt[]>("GET", "/api/v1/bills"),
   billFromText: (text: string) => request<Receipt>("POST", "/api/v1/bills/text", { text }),
-  billFromPhoto: (form: FormData) => request<Receipt>("POST", "/api/v1/bills/scan", form),
+  billFromPhoto: (form: FormData) => request<Receipt>("POST", "/api/v1/bills/scan", form, {}, BILL_MS),
   confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[], supplier?: string) =>
     request<Receipt>("POST", `/api/v1/bills/${id}/confirm`, { lines, supplier_name: supplier ?? null }),
   discardBill: (id: string) => request<Receipt>("POST", `/api/v1/bills/${id}/discard`),

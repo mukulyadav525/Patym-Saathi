@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app import seed_data as fx
 from app.errors import ApiError
 from app.models import (
+    today_ist,
     Invoice,
     KhataEntry,
     Merchant,
@@ -27,6 +28,7 @@ from app.models import (
 )
 from app.services import audit, brief as brief_service
 from app.services.restock import festival_uplift, money
+from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
 
 ONE = Decimal("1")
@@ -73,7 +75,7 @@ def _cheapest_quotes_query(db: Session, merchant_id: uuid.UUID) -> dict[str, Dec
 # ---------- 1. festival nudge ----------
 
 def upcoming_festival(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict | None:
-    today = today or date.today()
+    today = today or today_ist()
     festival_day = date.fromisoformat(fx.FESTIVAL["date"])
     days = (festival_day - today).days
     if days < 0 or days > 30:
@@ -221,11 +223,11 @@ def draft_offer(db: Session, merchant: Merchant, user_id: uuid.UUID, actor: str,
 # ---------- 7. khata insights ----------
 
 def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict:
-    today = today or date.today()
+    today = today or today_ist()
     entries = db.scalars(select(KhataEntry).where(KhataEntry.merchant_id == merchant_id)
                          .order_by(KhataEntry.entry_date, KhataEntry.id)).all()
     open_invoices = {i.customer_name: i for i in db.scalars(select(Invoice).where(
-        Invoice.merchant_id == merchant_id, Invoice.status.in_(("PENDING", "DRAFTED", "SENT", "FAILED", "EXPIRED"))))}
+        Invoice.merchant_id == merchant_id, Invoice.status.in_(UNPAID)))}
     by_customer: dict[str, list[KhataEntry]] = defaultdict(list)
     for e in entries:
         by_customer[e.customer_name].append(e)
@@ -292,7 +294,7 @@ def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = Non
 
 def cashflow(db: Session, merchant: Merchant, today: date | None = None, days: int = 14,
              include_pending: bool = True) -> dict:
-    today = today or date.today()
+    today = today or today_ist()
     sales = sales_summary(db, merchant.id)
     cost = _cheapest_quotes(db, merchant.id)
     weekly_revenue = Decimal("0")
@@ -312,7 +314,7 @@ def cashflow(db: Session, merchant: Merchant, today: date | None = None, days: i
 
     events: dict[int, list[dict]] = defaultdict(list)
     for inv in db.scalars(select(Invoice).where(Invoice.merchant_id == merchant.id,
-                                                Invoice.status.in_(("PENDING", "DRAFTED", "SENT")))):
+                                                Invoice.status.in_(UNPAID))):
         offset = (inv.due_date - today).days
         if offset < 0:
             continue  # overdue: not counted until it is actually paid
@@ -424,12 +426,12 @@ def benchmarks(db: Session, merchant_id: uuid.UUID) -> dict:
 # ---------- 2. Hindi voice brief ----------
 
 def brief_speech(db: Session, merchant: Merchant, lang: str = "hi-IN", today: date | None = None) -> str:
-    today = today or date.today()
+    today = today or today_ist()
     data = brief_service.build(db, merchant.id, today)
     first = merchant.owner_name.split(" ")[0]
     lines: list[str] = []
     overdue = db.scalars(select(Invoice).where(Invoice.merchant_id == merchant.id,
-                                               Invoice.status.in_(("PENDING", "SENT", "DRAFTED")),
+                                               Invoice.status.in_(UNPAID),
                                                Invoice.due_date < today).order_by(Invoice.due_date)).first()
     lows = brief_service.low_stock(db, merchant.id)
     week = brief_service.last_week_sales(db, merchant.id)
@@ -464,7 +466,7 @@ def proactive_scan(db: Session, ctx, today: date | None = None) -> dict:
     """Saathi checks the shop and prepares work. It only drafts: every action still needs approval."""
     from app.services import assistant, dues_flow, restock_flow  # local import: avoid cycles
 
-    today = today or date.today()
+    today = today or today_ist()
     merchant = ctx.merchant
     created: list[dict] = []
     notes: list[str] = []
@@ -486,7 +488,8 @@ def proactive_scan(db: Session, ctx, today: date | None = None) -> dict:
             notes.append(f"Low stock found, but the full restock is above your ₹{budget:,.0f} default budget.")
     elif lows:
         notes.append("Low stock found; a restock task is already open.")
-    for inv in db.scalars(select(Invoice).where(Invoice.merchant_id == merchant.id, Invoice.status == "PENDING",
+    for inv in db.scalars(select(Invoice).where(Invoice.merchant_id == merchant.id,
+                                                Invoice.status.in_(dues_flow.COLLECTABLE),
                                                 Invoice.due_date < today).order_by(Invoice.due_date)):
         if db.scalar(select(Task.id).where(Task.invoice_id == inv.id, Task.state.in_(OPEN_TASK_STATES))):
             continue

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app import schemas as s
 from app.models import (
+    today_ist,
     Approval,
     AuditEvent,
     DataConnection,
@@ -22,6 +23,7 @@ from app.models import (
     Task,
 )
 from app.services import brief as brief_service
+from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
 
 NEEDS_APPROVAL = {"AWAITING_APPROVAL"}
@@ -53,7 +55,7 @@ def inventory(db: Session, merchant_id: uuid.UUID) -> list[s.InventoryItem]:
 
 
 def invoice_out(db: Session, invoice: Invoice, today: date | None = None) -> s.InvoiceOut:
-    today = today or date.today()
+    today = today or today_ist()
     open_task = db.scalar(select(Task.id).where(Task.invoice_id == invoice.id, Task.state.notin_(DONE))
                           .order_by(Task.created_at.desc()).limit(1))
     overdue = (today - invoice.due_date).days if invoice.status not in ("PAID", "CANCELLED", "REFUNDED") else 0
@@ -206,10 +208,10 @@ def connections(db: Session, merchant_id: uuid.UUID) -> list[s.ConnectionOut]:
 def dashboard(db: Session, merchant: Merchant, demo_mode: bool) -> s.DashboardOut:
     mid = merchant.id
     open_invoices = db.scalars(select(Invoice).where(
-        Invoice.merchant_id == mid, Invoice.status.in_(("PENDING", "DRAFTED", "APPROVED", "SENT")))).all()
+        Invoice.merchant_id == mid, Invoice.status.in_(UNPAID))).all()
     task_rows = tasks(db, mid)
     week = brief_service.last_week_sales(db, mid)
-    today = date.today()
+    today = today_ist()
     paid = db.scalars(select(Invoice.amount).where(Invoice.merchant_id == mid, Invoice.status == "PAID")).all()
     overdue = [i.amount for i in open_invoices if i.due_date < today]
     pending = [i.amount for i in open_invoices if i.due_date >= today]
