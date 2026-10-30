@@ -408,6 +408,7 @@ class KhataCustomer(BaseModel):
     customer_name: str
     phone_masked: str
     outstanding: MoneyStr
+    advance: MoneyStr = "0.00"
     oldest_open_days: int | None
     avg_days_to_pay: float | None
     late_payments: int

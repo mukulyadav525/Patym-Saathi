@@ -406,3 +406,13 @@ class GoodsReceipt(Base):
     confirmed_by: Mapped[uuid.UUID | None] = fk("users.id", nullable=True)
     created_at: Mapped[datetime] = ts()
     confirmed_at: Mapped[datetime | None] = ts(nullable=True)
+
+
+class RateLimit(Base):
+    """Fixed-window request counters, shared by every API instance (protects paid Sarvam calls)."""
+    __tablename__ = "rate_limits"
+    __table_args__ = (UniqueConstraint("bucket_key", "window_start"),)
+    id: Mapped[uuid.UUID] = pk()
+    bucket_key: Mapped[str] = mapped_column(String(120))
+    window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)

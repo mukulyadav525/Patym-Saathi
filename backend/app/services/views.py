@@ -85,9 +85,9 @@ def orders(db: Session, merchant_id: uuid.UUID, task_id: uuid.UUID | None = None
         out.append(s.OrderOut(
             id=str(order.id), reference=order.reference, task_id=str(order.task_id), supplier_name=supplier.name,
             status=order.status, connector_mode=order.connector_mode, total=m(order.total), created_at=order.created_at,
-            lines=[s.OrderLineOut(product_id=str(p.id), name=p.name, pack_label=p.pack_label, packs=l.packs,
-                                  unit_price=m(l.unit_price), line_total=m(l.line_total), line_status=l.line_status)
-                   for l, p in lines],
+            lines=[s.OrderLineOut(product_id=str(p.id), name=p.name, pack_label=p.pack_label, packs=ln.packs,
+                                  unit_price=m(ln.unit_price), line_total=m(ln.line_total), line_status=ln.line_status)
+                   for ln, p in lines],
         ))
     return out
 

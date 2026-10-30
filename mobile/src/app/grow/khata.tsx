@@ -63,7 +63,9 @@ function CustomerCard({ c }: { c: KhataCustomer }) {
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Txt style={{ fontSize: 20, fontWeight: "800", color: owes ? colors.ink : colors.green }}>{rupees(c.outstanding)}</Txt>
-            <Txt style={ui.muted}>{owes ? `oldest ${c.oldest_open_days} days` : "nothing due"}</Txt>
+            <Txt style={[ui.muted, Number(c.advance) > 0 && !owes && { color: colors.green }]}>
+              {owes ? `oldest ${c.oldest_open_days} days` : Number(c.advance) > 0 ? `${rupees(c.advance)} advance` : "nothing due"}
+            </Txt>
           </View>
         </Row>
         <Row style={{ gap: 8, marginTop: 12 }}>

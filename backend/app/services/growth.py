@@ -6,12 +6,12 @@ from collections import defaultdict
 from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import seed_data as fx
 from app.errors import ApiError
 from app.models import (
+    IST,
     today_ist,
     Invoice,
     KhataEntry,
@@ -21,12 +21,11 @@ from app.models import (
     PeerBenchmark,
     Plan,
     Product,
-    SalesEvent,
     SupplierQuote,
     Task,
     utcnow,
 )
-from app.services import audit, brief as brief_service
+from app.services import audit, brief as brief_service, festivals, restock_flow
 from app.services.restock import festival_uplift, money
 from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
@@ -76,22 +75,21 @@ def _cheapest_quotes_query(db: Session, merchant_id: uuid.UUID) -> dict[str, Dec
 
 def upcoming_festival(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict | None:
     today = today or today_ist()
-    festival_day = date.fromisoformat(fx.FESTIVAL["date"])
-    days = (festival_day - today).days
-    if days < 0 or days > 30:
+    fest = festivals.next_festival(today)
+    if fest is None:
         return None
-    rows = db.execute(select(SalesEvent, Product).join(Product, Product.id == SalesEvent.product_id)
-                      .where(SalesEvent.merchant_id == merchant_id, SalesEvent.event_code == fx.FESTIVAL["code"])).all()
+    rows = restock_flow.latest_festival_events(db, merchant_id, fest["code"])
     if not rows:
-        return None
+        return None  # no past festival sales for this shop: nothing evidence-based to suggest
     items = sorted(({"name": p.name, "uplift": f"{festival_uplift(e.event_week_packs, e.baseline_weekly_packs)}",
                      "last_year_packs": e.event_week_packs, "normal_weekly": f"{e.baseline_weekly_packs}"}
                     for e, p in rows), key=lambda i: Decimal(i["uplift"]), reverse=True)
     return {
-        "code": fx.FESTIVAL["code"], "name": fx.FESTIVAL["name"], "name_hi": fx.FESTIVAL["name_hi"],
-        "date": festival_day.isoformat(), "days_left": days, "top_items": items[:4],
-        "suggested_prompt": "Diwali ke liye ₹10,000 ke andar stock arrange karo",
-        "source": f"Your sales in last {fx.FESTIVAL['name']} week ({rows[0][0].event_date:%d %b %Y}) vs the weeks before (SAMPLE)",
+        "code": fest["code"], "name": fest["name"], "name_hi": fest["name_hi"],
+        "date": fest["date"].isoformat(), "days_left": (fest["date"] - today).days, "top_items": items[:4],
+        "suggested_prompt": f"{fest['name']} ke liye ₹10,000 ke andar stock arrange karo",
+        "source": f"Your sales in last {fest['name']} week ({rows[0][0].event_date:%d %b %Y}) vs the weeks before "
+                  f"({rows[0][0].source})",
     }
 
 
@@ -179,7 +177,7 @@ def slow_movers(db: Session, merchant_id: uuid.UUID) -> list[dict]:
             "cash_tied_up": f"{money((unit_cost or product.sell_price) * inv.usable_packs)}",
             "sell_price": f"{product.sell_price:.2f}", "unit_cost": f"{unit_cost:.2f}" if unit_cost else None,
             "suggested_discount": discount, "offer_price": f"{offer_price:.2f}",
-            "reason": (f"Sales fell from {weeks[-4]} to {last} packs/week; {inv.usable_packs} in stock "
+            "reason": (f"Sales fell from {weeks[0]} to {last} packs/week; {inv.usable_packs} in stock "
                        f"(~{weeks_cover:.0f} weeks)" if falling else f"{inv.usable_packs} in stock, ~{weeks_cover:.0f} weeks of sales"),
         })
     return sorted(out, key=lambda i: Decimal(i["cash_tied_up"]), reverse=True)
@@ -233,11 +231,22 @@ def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = Non
         by_customer[e.customer_name].append(e)
     customers = []
     for name, rows in by_customer.items():
-        credits = [[e.entry_date, e.amount] for e in rows if e.kind == "CREDIT"]
+        # Running ledger in date order: payments settle the oldest open credit first; anything paid beyond
+        # what is owed becomes an advance that settles the next credit (paid on the day it was taken).
         days_to_pay: list[int] = []
-        queue = [c[:] for c in credits]
+        queue: list[list] = []  # [credit date, amount still open]
+        advance = Decimal("0")
         for e in rows:
-            if e.kind != "PAYMENT":
+            if e.kind == "CREDIT":
+                open_amount = e.amount
+                if advance > 0:
+                    used = min(advance, open_amount)
+                    advance -= used
+                    open_amount -= used
+                    if open_amount == 0:
+                        days_to_pay.append(0)
+                if open_amount > 0:
+                    queue.append([e.entry_date, open_amount])
                 continue
             remaining = e.amount
             while remaining > 0 and queue:
@@ -248,6 +257,7 @@ def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = Non
                 if credit[1] == 0:
                     days_to_pay.append((e.entry_date - credit[0]).days)
                     queue.pop(0)
+            advance += remaining
         outstanding = sum((c[1] for c in queue), Decimal("0"))
         oldest_open = queue[0][0] if queue else None
         avg_days = round(sum(days_to_pay) / len(days_to_pay), 1) if days_to_pay else None
@@ -267,6 +277,7 @@ def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = Non
         invoice = open_invoices.get(name)
         customers.append({
             "customer_name": name, "phone_masked": rows[0].customer_phone_masked, "outstanding": f"{money(outstanding)}",
+            "advance": f"{money(advance)}",
             "oldest_open_days": (today - oldest_open).days if oldest_open else None,
             "avg_days_to_pay": avg_days, "late_payments": late, "payments": len(days_to_pay),
             "credit_90d": f"{money(total_credit_90)}", "label": label, "suggested_limit": f"{money(limit)}",
@@ -309,6 +320,10 @@ def cashflow(db: Session, merchant: Merchant, today: date | None = None, days: i
     if opening is None:
         missing.append("Cash in hand not entered; forecast starts from ₹0.")
         opening = Decimal("0")
+    elif merchant.cash_on_hand_at is not None:
+        age = (today - merchant.cash_on_hand_at.astimezone(IST).date()).days
+        if age >= 2:
+            missing.append(f"Cash in hand was last updated {age} days ago; update it for a reliable forecast.")
     if merchant.weekly_expenses is None:
         missing.append("Weekly expenses (rent, salary) not entered.")
 
@@ -466,6 +481,9 @@ def proactive_scan(db: Session, ctx, today: date | None = None) -> dict:
     """Saathi checks the shop and prepares work. It only drafts: every action still needs approval."""
     from app.services import assistant, dues_flow, restock_flow  # local import: avoid cycles
 
+    # One scan per merchant at a time across all API instances (button tap vs scheduled job): the
+    # check-then-create below would otherwise create duplicate tasks. Released at commit.
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"saathi-scan:{ctx.merchant.id}"})
     today = today or today_ist()
     merchant = ctx.merchant
     created: list[dict] = []
@@ -512,25 +530,34 @@ def proactive_scan(db: Session, ctx, today: date | None = None) -> dict:
 
 
 def scheduled_scan_all() -> int:
-    """Background job: run the proactive check for every active merchant as its owner. Returns tasks created."""
-    from app.db import SessionLocal  # local import: keep this module importable without a DB
+    """Background job: run the proactive check for every active merchant as its owner. Returns tasks created.
+    A session-level advisory lock on a dedicated connection makes sure only one API instance sweeps at a time."""
+    from app.db import SessionLocal, engine  # local import: keep this module importable without a DB
     from app.models import MerchantMembership, User
     from app.security import Ctx
 
     created = 0
-    with SessionLocal() as db:
-        rows = db.execute(select(MerchantMembership, Merchant, User)
-                          .join(Merchant, Merchant.id == MerchantMembership.merchant_id)
-                          .join(User, User.id == MerchantMembership.user_id)
-                          .where(Merchant.status == "ACTIVE", MerchantMembership.status == "ACTIVE",
-                                 MerchantMembership.role.in_(("OWNER", "DEMO_ADMIN")))).all()
-        seen: set[uuid.UUID] = set()
-        for membership, merchant, user in rows:
-            if merchant.id in seen:
-                continue
-            seen.add(merchant.id)
-            try:
-                created += len(proactive_scan(db, Ctx(user=user, merchant=merchant, role=membership.role))["created"])
-            except Exception:  # noqa: BLE001 - one merchant's failure must not stop the others
-                db.rollback()
+    with engine.connect() as lock_conn:
+        if not lock_conn.execute(text("SELECT pg_try_advisory_lock(hashtext('saathi-scheduled-scan'))")).scalar():
+            return 0
+        try:
+            with SessionLocal() as db:
+                rows = db.execute(select(MerchantMembership, Merchant, User)
+                                  .join(Merchant, Merchant.id == MerchantMembership.merchant_id)
+                                  .join(User, User.id == MerchantMembership.user_id)
+                                  .where(Merchant.status == "ACTIVE", MerchantMembership.status == "ACTIVE",
+                                         MerchantMembership.role.in_(("OWNER", "DEMO_ADMIN")))).all()
+                seen: set[uuid.UUID] = set()
+                for membership, merchant, user in rows:
+                    if merchant.id in seen:
+                        continue
+                    seen.add(merchant.id)
+                    try:
+                        ctx = Ctx(user=user, merchant=merchant, role=membership.role)
+                        created += len(proactive_scan(db, ctx)["created"])
+                    except Exception:  # noqa: BLE001 - one merchant's failure must not stop the others
+                        db.rollback()
+        finally:
+            lock_conn.execute(text("SELECT pg_advisory_unlock(hashtext('saathi-scheduled-scan'))"))
+            lock_conn.commit()
     return created

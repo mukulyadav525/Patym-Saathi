@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.db import SessionLocal
@@ -194,3 +194,30 @@ def test_docai_html_table_flattened_and_parsed():
     got = {line["name"]: (line["packs"], line["unit_price"]) for line in parsed["lines"]}
     assert got == {"Sugar": (12, "44.00"), "Tea": (5, "140.00")} and parsed["bill_total"] == "1228.00"
     assert parsed["supplier_name"] == "METRO WHOLESALE TRADERS"
+
+
+def test_khata_advance_and_overpayment():
+    from app.models import KhataEntry, Merchant
+    with SessionLocal() as db:
+        m = db.query(Merchant).filter(Merchant.display_name == "Sharma Kirana Store").one()
+        today = date.today()
+        rows = [(-30, "PAYMENT", "500"), (-20, "CREDIT", "300"), (-10, "CREDIT", "400"), (-5, "PAYMENT", "600")]
+        for off, kind, amt in rows:
+            db.add(KhataEntry(merchant_id=m.id, customer_name="Advance Wala", customer_phone_masked="+91 9X", entry_date=today + timedelta(days=off),
+                              kind=kind, amount=Decimal(amt), note="", source="MANUAL"))
+        db.commit()
+        k = growth.khata_insights(db, m.id, today)
+    c = next(c for c in k["customers"] if c["customer_name"] == "Advance Wala")
+    # 500 advance covers the 300 credit fully and 200 of the 400; 600 pays the remaining 200 -> 400 advance left
+    assert c["outstanding"] == "0.00" and c["advance"] == "400.00" and c["reminder"] is None
+    assert c["payments"] == 2
+
+
+def test_cashflow_flags_stale_cash_figure(client, auth):
+    from app.models import Merchant, utcnow
+    with SessionLocal() as db:
+        m = db.query(Merchant).filter(Merchant.display_name == "Sharma Kirana Store").one()
+        m.cash_on_hand_at = utcnow() - timedelta(days=5)
+        db.commit()
+    c = client.get("/api/v1/cashflow", headers=auth).json()
+    assert any("5 days ago" in note for note in c["missing"])

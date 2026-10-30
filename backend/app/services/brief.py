@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import Invoice, Product, SalesWeekly, SupplierQuote, today_ist
 from app.services.restock import money
 from app.services.states import UNPAID
-from app.services.restock_flow import inventory_snapshot, sales_summary
+from app.services.restock_flow import inventory_snapshot, sales_summary, sales_window
 
 LOW_STOCK_RATIO = Decimal("0.5")  # less than half a week of average demand
 
@@ -53,14 +53,19 @@ def last_week_sales(db: Session, merchant_id: uuid.UUID) -> dict:
 
 
 def weekly_sales(db: Session, merchant_id: uuid.UUID) -> list[dict]:
-    """Revenue per week (sell price x packs sold) from the weekly sales records, oldest first."""
+    """Revenue per week (sell price x packs sold) for the last 4 completed weeks, oldest first; 0 for a week with
+    no records. Same window as every other sales figure."""
+    window = sales_window()
     rows = db.execute(
         select(SalesWeekly.week_start, func.sum(SalesWeekly.packs_sold * Product.sell_price), func.sum(SalesWeekly.packs_sold))
         .join(Product, Product.id == SalesWeekly.product_id)
-        .where(SalesWeekly.merchant_id == merchant_id)
-        .group_by(SalesWeekly.week_start).order_by(SalesWeekly.week_start)
+        .where(SalesWeekly.merchant_id == merchant_id, SalesWeekly.week_start >= window[0],
+               SalesWeekly.week_start <= window[-1])
+        .group_by(SalesWeekly.week_start)
     ).all()
-    return [{"week_start": w, "revenue": money(Decimal(r or 0)), "packs": int(p or 0)} for w, r, p in rows]
+    by_week = {w: (r, p) for w, r, p in rows}
+    return [{"week_start": w, "revenue": money(Decimal(by_week.get(w, (0, 0))[0] or 0)),
+             "packs": int(by_week.get(w, (0, 0))[1] or 0)} for w in window]
 
 
 def build(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict:

@@ -4,6 +4,7 @@ proactive scan, bills. Read endpoints compute from records; writes only draft or
 import uuid
 from decimal import Decimal
 
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -14,7 +15,7 @@ from app.db import get_db
 from app.errors import ApiError, parse_money
 from app.models import GoodsReceipt, Invoice, Offer, Product, Task
 from app.security import Ctx, current_ctx
-from app.services import audit, bills, dues_flow, growth
+from app.services import audit, bills, dues_flow, growth, ratelimit
 
 growth_api = APIRouter(prefix="/api/v1")
 
@@ -82,6 +83,7 @@ def brief_speech(lang: str = Query("hi-IN", pattern=r"^[a-z]{2}-IN$"), audio: bo
     text = growth.brief_speech(db, ctx.merchant, "hi-IN" if lang == "hi-IN" else "en-IN")
     language = lang
     if lang not in ("hi-IN", "en-IN"):
+        ratelimit.check(ctx.merchant_id, "translate")
         # Other languages: translate the English brief with Mayura, then speak it. If the translation
         # altered any number, fall back to the English brief rather than speak a wrong amount.
         try:
@@ -92,6 +94,7 @@ def brief_speech(lang: str = Query("hi-IN", pattern=r"^[a-z]{2}-IN$"), audio: bo
             language = lang = "en-IN"
     if not audio or not sarvam.enabled():
         return s.SpeechOut(text=text, language=language, voice="LIVE" if sarvam.enabled() else "OFF")
+    ratelimit.check(ctx.merchant_id, "speech")
     return s.SpeechOut(text=text, language=language, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
 
 
@@ -163,6 +166,7 @@ def translate(body: s.TranslateRequest, ctx: Ctx = Depends(current_ctx), db: Ses
         return s.TranslateOut(text=original, language="hi-IN", engine="ORIGINAL")
     if body.target == "en-IN":
         return s.TranslateOut(text=english, language="en-IN", engine="TEMPLATE")
+    ratelimit.check(ctx.merchant_id, "translate")
     return s.TranslateOut(text=sarvam.translate(english, body.target), language=body.target, engine="SARVAM_MAYURA")
 
 
@@ -217,6 +221,7 @@ def benchmarks(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -
 
 @growth_api.post("/agent/scan", response_model=s.ScanOut)
 def agent_scan(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.ScanOut:
+    ratelimit.check(ctx.merchant_id, "scan")
     return s.ScanOut(**growth.proactive_scan(db, ctx))
 
 
@@ -244,10 +249,17 @@ async def bill_from_photo(file: UploadFile = File(...), supplier_name: str | Non
     data = await file.read(10 * 1024 * 1024 + 1)
     if len(data) > 10 * 1024 * 1024:
         raise ApiError(413, "FILE_TOO_LARGE", "Photo too large; keep it under 10 MB")
-    text = sarvam.parse_document(data, file.filename or "bill.jpg", file.content_type or "image/jpeg")
-    receipt, extras = bills.create_receipt(db, ctx.merchant_id, ctx.user.id, ctx.actor, text, "PHOTO", supplier_name)
-    db.commit()
-    return _receipt_out(receipt, extras)
+    filename, content_type = file.filename or "bill.jpg", file.content_type or "image/jpeg"
+
+    def work() -> s.ReceiptOut:
+        # Document AI polls for up to ~25 s: keep it off the event loop.
+        ratelimit.check(ctx.merchant_id, "bill_scan")
+        text = sarvam.parse_document(data, filename, content_type)
+        receipt, extras = bills.create_receipt(db, ctx.merchant_id, ctx.user.id, ctx.actor, text, "PHOTO", supplier_name)
+        db.commit()
+        return _receipt_out(receipt, extras)
+
+    return await run_in_threadpool(work)
 
 
 @growth_api.post("/bills/{receipt_id}/confirm", response_model=s.ReceiptOut)

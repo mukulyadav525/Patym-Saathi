@@ -43,3 +43,28 @@ def test_normal_restock_unchanged(client, auth):
     body = client.post("/api/v1/assistant/message", json={"text": "Weekend ke liye ₹5,000 ke andar stock arrange karo"},
                        headers=auth).json()
     assert body["task"]["plans"][-1]["total"] == "4650.00" and body["task"]["plans"][-1]["festival"] is None
+
+
+def test_festival_calendar_beyond_this_year():
+    from datetime import date as d
+    from app.services.festivals import next_festival
+    assert next_festival(d(2026, 10, 30))["date"] == d(2026, 11, 8)
+    assert next_festival(d(2027, 10, 10))["date"] == d(2027, 10, 29)
+    assert next_festival(d(2027, 6, 1)) is None
+
+
+def test_uplift_uses_latest_festival_week_only(client, auth):
+    from datetime import date as d
+    from app.db import SessionLocal
+    from app.models import SalesEvent
+    with SessionLocal() as db:
+        for e in db.query(SalesEvent).filter(SalesEvent.event_code == "DIWALI").all():
+            # an older year with a huge spike must not be mixed in
+            db.add(SalesEvent(merchant_id=e.merchant_id, product_id=e.product_id, event_code="DIWALI", event_name="Diwali",
+                              event_date=d(2024, 11, 1), event_week_packs=e.event_week_packs * 10,
+                              baseline_weekly_packs=e.baseline_weekly_packs, source="SAMPLE"))
+        db.commit()
+    body = client.post("/api/v1/assistant/message", json={"text": "Diwali ke liye ₹10,000 ke andar stock arrange karo"},
+                       headers=auth).json()
+    plan = body["task"]["plans"][-1]
+    assert Decimal(plan["total"]) == EXPECTED_DIWALI_PLAN and len(plan["festival_evidence"]) == 8

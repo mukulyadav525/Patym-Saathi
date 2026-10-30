@@ -49,6 +49,86 @@ def _match(line: str, products: list[Product]) -> Product | None:
     return best
 
 
+MONEY_RE = r"(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d+)?)"
+SERIAL = re.compile(r"^\s*(?:(?:s\.?\s*no|sr\.?\s*no|sl\.?\s*no)\.?\s*:?\s*\d{1,3}\b|#?\d{1,3}\s*[.)\]:-]\s)", re.I)
+HSN = re.compile(r"\b(?:hsn|sac)\s*(?:code)?\s*[:#.]?\s*\d{4,8}\b", re.I)
+PERCENT = re.compile(r"\d+(?:\.\d+)?\s*%")
+MRP = re.compile(r"\bmrp\s*[:=.]?\s*" + MONEY_RE, re.I)
+QTY_LABEL = re.compile(r"\b(?:qty|quantity)\s*[:=.]?\s*(\d+)\b|\b(\d+)\s*(?:bags?|pcs|pc|pkts?|packs?|packets?|nos|pieces|boxes|units|bottles|tins|cartons?)\b", re.I)
+RATE_LABEL = re.compile(r"(?:\brate\b|\bprice\b|@)\s*[:=.]?\s*" + MONEY_RE, re.I)
+AMOUNT_LABEL = re.compile(r"(?:\bamt\b|\bamount\b|\bvalue\b|=)\s*[:=.]?\s*" + MONEY_RE, re.I)
+
+
+def _closeness(price: Decimal, ref: Decimal) -> Decimal:
+    """How far a candidate unit price is from the item's known price, as a ratio (1 = identical)."""
+    if price <= 0 or ref <= 0:
+        return Decimal("1e9")
+    return max(price / ref, ref / price)
+
+
+def read_quantities(line: str, ref_price: Decimal) -> tuple[Decimal | None, Decimal | None]:
+    """(packs, unit price) from one bill line. Serial numbers, HSN codes, tax percentages, MRP and pack sizes are
+    removed first; labelled fields (qty/bags, rate/@, amt/=) win; otherwise qty x rate = amount decides, and when
+    only one price is printed the item's known price tells a unit rate from a line total."""
+    s = SERIAL.sub(" ", line, count=1)
+    s = HSN.sub(" ", s)
+    s = MRP.sub(" ", s)
+    s = PERCENT.sub(" ", s)
+    s = UNIT.sub(" ", s)
+    qty = rate = amount = None
+    if m := QTY_LABEL.search(s):
+        qty = _num(m.group(1) or m.group(2))
+        s = s[:m.start()] + " " + s[m.end():]
+    if m := RATE_LABEL.search(s):
+        rate = _num(m.group(1))
+        s = s[:m.start()] + " " + s[m.end():]
+    if m := AMOUNT_LABEL.search(s):
+        amount = _num(m.group(1))
+        s = s[:m.start()] + " " + s[m.end():]
+    rest = [n for n in (_num(x) for x in NUMBER.findall(s)) if n is not None and n > 0][:4]
+    is_qty = lambda n: n == n.to_integral_value() and 0 < n <= 1000  # noqa: E731
+
+    if qty is not None and rate is not None:
+        return qty, rate
+    if qty is not None and amount is not None:
+        return qty, amount / qty
+    if rate is not None and amount is not None and qty is None:
+        q = (amount / rate).quantize(Decimal("0.01"))
+        return (q, rate) if is_qty(q) else (None, None)
+    if qty is not None:
+        if rate is None and amount is None and rest:
+            # one printed price: unit rate or line total, whichever is closer to the item's known price
+            x = rest[0] if len(rest) == 1 else None
+            if len(rest) >= 2:
+                for r, a in ((rest[0], rest[1]), (rest[1], rest[0])):
+                    if abs(qty * r - a) <= max(Decimal("1"), a / 100):
+                        return qty, r
+                x = rest[0]
+            return qty, min((x, x / qty), key=lambda p: _closeness(p, ref_price))
+        return qty, rate if rate is not None else (amount / qty if amount is not None else None)
+    if rate is not None:
+        q = next((n for n in rest if is_qty(n)), None)
+        return q, rate
+    if amount is not None:
+        q = next((n for n in rest if is_qty(n)), None)
+        return q, (amount / q if q else None)
+    # Unlabelled: look for qty x rate = amount among the numbers, in any order.
+    for i, q in enumerate(rest):
+        if not is_qty(q):
+            continue
+        for j, r in enumerate(rest):
+            for k, a in enumerate(rest):
+                if len({i, j, k}) == 3 and abs(q * r - a) <= max(Decimal("1"), a / 100):
+                    return q, r
+    if len(rest) >= 2:
+        options = [(q, p) for q, x in ((rest[0], rest[1]), (rest[1], rest[0])) if is_qty(q) for p in (x, x / q)]
+        if options:
+            return min(options, key=lambda o: _closeness(o[1], ref_price))
+    if rest and is_qty(rest[0]):
+        return rest[0], None
+    return None, None
+
+
 def parse_bill_text(text: str, products: list[Product]) -> dict:
     lines_out, unmatched = [], []
     supplier, bill_total = "", None
@@ -67,28 +147,11 @@ def parse_bill_text(text: str, products: list[Product]) -> dict:
             bill_total = nums[-1] if nums else bill_total
             continue
         product = _match(line, products)
-        cleaned = UNIT.sub(" ", line)
-        nums = [n for n in (_num(x) for x in NUMBER.findall(cleaned)) if n is not None]
         if product is None:
-            if nums:
+            if NUMBER.search(UNIT.sub(" ", line)):
                 unmatched.append(line[:120])
             continue
-        qty, price = None, None
-        ints = [n for n in nums if n == n.to_integral_value() and 0 < n <= 1000]
-        if len(nums) >= 3:
-            q, r, amt = nums[0], nums[1], nums[2]
-            if abs(q * r - amt) <= 1:
-                qty, price = q, r
-            elif abs(r * q - amt) > 1 and abs(nums[1] * nums[0] - nums[-1]) <= 1:
-                qty, price = nums[0], nums[1]
-            else:
-                qty, price = q, (amt / q if q else None)
-        elif len(nums) == 2:
-            qty, price = nums[0], nums[1]
-            if price and qty and price < qty and price <= 1000:  # e.g. "Sugar 42 x 30": rate first
-                qty, price = price, qty
-        elif ints:
-            qty = ints[0]
+        qty, price = read_quantities(line, product.sell_price)
         if qty is None or qty <= 0 or qty != qty.to_integral_value() or qty > 1000:
             unmatched.append(line[:120])
             continue

@@ -7,7 +7,7 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Saathi Dashboard",
+  title: "Paytm Business · Saathi",
   description: "Merchant dashboard for the Paytm Saathi hackathon prototype (sample data).",
 };
 

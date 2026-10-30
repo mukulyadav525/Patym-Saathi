@@ -3,7 +3,7 @@ second approval -> order -> goods receipt. All numbers come from build_plan; the
 
 import uuid
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -25,6 +25,7 @@ from app.models import (
     Supplier,
     SupplierQuote,
     Task,
+    today_ist,
     utcnow,
 )
 from app.services import audit
@@ -46,17 +47,40 @@ def sales_summary(db: Session, merchant_id: uuid.UUID) -> dict[str, dict]:
     return db.info[key]
 
 
+SALES_WINDOW_WEEKS = 4
+
+
+def sales_window(today: date | None = None) -> list[date]:
+    """Mondays of the last 4 completed weeks (oldest first), in the merchant's calendar (IST)."""
+    today = today or today_ist()
+    this_monday = today - timedelta(days=today.weekday())
+    return [this_monday - timedelta(weeks=n) for n in range(SALES_WINDOW_WEEKS, 0, -1)]
+
+
 def _sales_summary(db: Session, merchant_id: uuid.UUID) -> dict[str, dict]:
+    """Per product: packs sold in each of the last 4 completed weeks, aligned to the calendar.
+
+    A week with no record counts as 0 once the item has started selling (POS feeds skip zero-sale weeks);
+    weeks before an item's first sale are left out so a new item isn't averaged down. Records older than
+    the window are ignored, so a stale feed shows up as missing data instead of as current demand.
+    """
+    window = sales_window()
     rows = db.scalars(
-        select(SalesWeekly).where(SalesWeekly.merchant_id == merchant_id).order_by(SalesWeekly.week_start)
+        select(SalesWeekly).where(SalesWeekly.merchant_id == merchant_id, SalesWeekly.week_start >= window[0],
+                                  SalesWeekly.week_start <= window[-1]).order_by(SalesWeekly.week_start)
     ).all()
-    out: dict[str, dict] = defaultdict(lambda: {"weeks": [], "source": "SAMPLE", "imported_at": None})
+    by_product: dict[str, dict] = {}
     for row in rows:
-        entry = out[str(row.product_id)]
-        entry["weeks"].append(row.packs_sold)
-        entry["source"] = row.source
-        entry["imported_at"] = row.imported_at
-    return dict(out)
+        entry = by_product.setdefault(str(row.product_id), {"packs": defaultdict(int), "source": row.source,
+                                                            "imported_at": row.imported_at})
+        entry["packs"][row.week_start] += row.packs_sold
+        entry["source"], entry["imported_at"] = row.source, row.imported_at
+    out: dict[str, dict] = {}
+    for pid, entry in by_product.items():
+        first = min(entry["packs"])
+        out[pid] = {"weeks": [entry["packs"].get(w, 0) for w in window if w >= first], "source": entry["source"],
+                    "imported_at": entry["imported_at"]}
+    return out
 
 
 def inventory_snapshot(db: Session, merchant_id: uuid.UUID) -> list[tuple[Product, Inventory]]:
@@ -141,10 +165,20 @@ def _line_dict(line: PlanLine) -> dict:
     }
 
 
+def latest_festival_events(db: Session, merchant_id: uuid.UUID, code: str) -> list:
+    """(SalesEvent, Product) rows from the merchant's most recent recorded week of this festival only."""
+    latest = db.scalar(select(func.max(SalesEvent.event_date)).where(SalesEvent.merchant_id == merchant_id,
+                                                                     SalesEvent.event_code == code))
+    if latest is None:
+        return []
+    return db.execute(select(SalesEvent, Product).join(Product, Product.id == SalesEvent.product_id)
+                      .where(SalesEvent.merchant_id == merchant_id, SalesEvent.event_code == code,
+                             SalesEvent.event_date == latest)).all()
+
+
 def festival_uplifts(db: Session, merchant_id: uuid.UUID, code: str) -> tuple[dict[str, Decimal], list[dict], str | None]:
     """Per-item uplift from the merchant's own past festival week. Returns (uplifts, evidence, festival name)."""
-    rows = db.execute(select(SalesEvent, Product).join(Product, Product.id == SalesEvent.product_id)
-                      .where(SalesEvent.merchant_id == merchant_id, SalesEvent.event_code == code)).all()
+    rows = latest_festival_events(db, merchant_id, code)
     uplifts, evidence, name = {}, [], None
     for event, product in rows:
         u = festival_uplift(event.event_week_packs, event.baseline_weekly_packs)

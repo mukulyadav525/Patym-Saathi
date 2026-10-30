@@ -52,7 +52,7 @@ export default function Khata() {
                     <tr className="cursor-pointer border-b border-line hover:bg-bg" onClick={() => setOpen(open === c.customer_name ? null : c.customer_name)}>
                       <td className="p-4"><p className="font-bold">{c.customer_name}</p><p className="text-xs text-muted">{c.phone_masked}</p></td>
                       <td><Badge tone={TONE[c.label] ?? "muted"}>{c.label}</Badge></td>
-                      <td className="text-right font-extrabold">{rupees(c.outstanding)}{c.oldest_open_days != null && <p className="text-[11px] font-normal text-muted">oldest {c.oldest_open_days} d</p>}</td>
+                      <td className="text-right font-extrabold">{rupees(c.outstanding)}{c.oldest_open_days != null && <p className="text-[11px] font-normal text-muted">oldest {c.oldest_open_days} d</p>}{Number(c.advance) > 0 && <p className="text-[11px] font-semibold text-green">{rupees(c.advance)} advance</p>}</td>
                       <td className="text-right">{c.avg_days_to_pay ?? "—"}</td>
                       <td className="text-right">{c.late_payments}/{c.payments}</td>
                       <td className="text-right">{rupees(c.suggested_limit)}</td>

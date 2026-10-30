@@ -3,6 +3,7 @@ import uuid
 from datetime import timedelta
 from decimal import Decimal
 
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, Depends, File, Header, Query, Request, UploadFile
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -14,7 +15,7 @@ from app.db import get_db
 from app.errors import ApiError, parse_money
 from app.models import Invoice, MerchantMembership, Order, Task, User, utcnow
 from app.security import Ctx, current_ctx, hash_password, issue_token, verify_password
-from app.services import approvals, assistant, audit, dues_flow, readback, restock_flow, views
+from app.services import approvals, assistant, audit, dues_flow, ratelimit, readback, restock_flow, views
 from app.services.common import move_task
 from app.tools import registry
 
@@ -120,6 +121,7 @@ def get_brief(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) ->
 @api.post("/assistant/message", response_model=s.AssistantResponse)
 def assistant_message(body: s.AssistantRequest, ctx: Ctx = Depends(current_ctx),
                       db: Session = Depends(get_db)) -> s.AssistantResponse:
+    ratelimit.check(ctx.merchant_id, "assistant")
     return assistant.handle(db, ctx, body)
 
 
@@ -129,10 +131,17 @@ async def assistant_voice(audio: UploadFile = File(...), language: str = Query("
     data = await audio.read(5 * 1024 * 1024 + 1)
     if len(data) > 5 * 1024 * 1024:
         raise ApiError(413, "AUDIO_TOO_LARGE", "Recording too long; keep it under a minute")
-    transcript = sarvam.transcribe(data, audio.filename or "audio.m4a", audio.content_type or "audio/mp4", language)
-    # Saaras returns Devanagari for Hindi; the parser works on Latin/Hinglish. Show the original, parse the romanized.
-    parse_text = sarvam.romanize(transcript)
-    return assistant.handle(db, ctx, s.AssistantRequest(text=parse_text[:500]), channel="VOICE", transcript=transcript)
+    filename, content_type = audio.filename or "audio.m4a", audio.content_type or "audio/mp4"
+
+    def work() -> s.AssistantResponse:
+        # Blocking Sarvam + DB work runs in the thread pool so one recording never stalls other requests.
+        ratelimit.check(ctx.merchant_id, "voice")
+        transcript = sarvam.transcribe(data, filename, content_type, language)
+        # Saaras returns Devanagari for Hindi; the parser works on Latin/Hinglish. Show the original, parse the romanized.
+        parse_text = sarvam.romanize(transcript)
+        return assistant.handle(db, ctx, s.AssistantRequest(text=parse_text[:500]), channel="VOICE", transcript=transcript)
+
+    return await run_in_threadpool(work)
 
 
 @api.get("/tasks/{task_id}/readback", response_model=s.ReadbackOut)
@@ -143,6 +152,7 @@ def task_readback(task_id: uuid.UUID, lang: str = Query("hi-IN", pattern="^(hi|e
         raise ApiError(409, "NOTHING_TO_APPROVE", "This task has nothing waiting for approval")
     if not audio or not sarvam.enabled():
         return s.ReadbackOut(text=text, voice="LIVE" if sarvam.enabled() else "OFF")
+    ratelimit.check(ctx.merchant_id, "speech")
     return s.ReadbackOut(text=text, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
 
 
