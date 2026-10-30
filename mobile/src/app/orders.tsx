@@ -2,7 +2,7 @@ import { router } from "expo-router";
 
 import { Card, Divider, Empty, ErrorState, Loading, Row, Screen, SimBadge, StateBadge, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api } from "@/lib/api";
-import { rupees, timeAgo, useLoad } from "@/lib/hooks";
+import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 
 export default function Orders() {
   const { data, error, loading, refreshing, reload } = useLoad(api.orders);
@@ -24,7 +24,7 @@ export default function Orders() {
             </Row>
             <Divider />
             <Row style={{ justifyContent: "space-between" }}>
-              <Txt style={ui.muted}>{o.lines.filter((l) => l.line_status === "ACCEPTED").reduce((n, l) => n + l.packs, 0)} packs accepted</Txt>
+              <Txt style={ui.muted}>{plural(o.lines.filter((l) => l.line_status === "ACCEPTED").reduce((n, l) => n + l.packs, 0), "pack")} accepted</Txt>
               <Txt style={{ fontWeight: "800", fontSize: 17 }}>{rupees(o.total)}</Txt>
             </Row>
           </Card>

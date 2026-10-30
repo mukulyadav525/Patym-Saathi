@@ -4,7 +4,7 @@ import { Link2, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useState } from "react";
 
-import { Badge, Button, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
+import { Badge, Button, ErrorBox, Note, PageTitle, Skeleton, useLoad } from "@/components/ui";
 import { api, ApiError, rupees } from "@/lib/api";
 import { shareText } from "@/lib/share";
 
@@ -79,8 +79,8 @@ export default function Khata() {
               </tbody>
             </table>
           </div>
-          {data.rules.map((r) => <p key={r} className="mt-2 text-xs text-muted">ⓘ {r}</p>)}
-          <p className="mt-1 text-xs text-muted">Source: {data.source}</p>
+          {data.rules.map((r) => <Note key={r}>{r}</Note>)}
+          <Note>Source: {data.source}</Note>
         </>
       )}
     </>

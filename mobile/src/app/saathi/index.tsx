@@ -11,8 +11,12 @@ import { useVoiceAgent } from "@/lib/voiceAgent";
 import { Brand, Card, ErrorState, IconTile, Loading, Row, Screen, SectionTitle, Txt, styles as ui, type IconName } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { rupees, useLoad } from "@/lib/hooks";
+import { plural, rupees, useLoad } from "@/lib/hooks";
 import { colors, radius, type Tone } from "@/lib/theme";
+
+const SOURCE_LABEL: Record<string, string> = {
+  INVENTORY: "Inventory", KHATA: "Khata", PAYTM: "Paytm payments", PEERS: "Nearby stores", POS: "POS sales", SARVAM: "Sarvam voice", SUPPLIER: "Suppliers",
+};
 
 const ACTIONS: { label: string; icon: IconName; tone: Tone; go: () => void }[] = [
   { label: "Collect", icon: "qr-code-outline", tone: "cyan", go: () => router.push("/dues") },
@@ -92,7 +96,7 @@ export default function Home() {
         </Pressable>
       </Row>
 
-      <Txt style={ui.h1}>Namaste, {first} 👋</Txt>
+      <Txt style={ui.h1}>Namaste, {first}</Txt>
       <Txt style={[ui.h3, { color: colors.inkSoft, marginTop: 2 }]}>{session?.merchant.display_name}</Txt>
       <Row style={{ marginTop: 2, marginBottom: 14 }}>
         <Ionicons name="location-outline" size={13} color={colors.muted} />
@@ -105,7 +109,7 @@ export default function Home() {
             <Card style={s.stat} onPress={() => router.push("/dues")}>
               <Txt style={s.statLabel}>Dues to collect</Txt>
               <Txt style={ui.money}>{rupees(data.outstanding_dues)}</Txt>
-              <Txt style={[ui.muted, { color: colors.amber, fontWeight: "600" }]}>{data.outstanding_count} open invoices</Txt>
+              <Txt style={[ui.muted, { color: colors.amber, fontWeight: "600" }]}>{plural(data.outstanding_count, "open invoice")}</Txt>
             </Card>
             <Card style={s.stat} onPress={() => router.push("/brief")}>
               <Txt style={s.statLabel}>Last week sales</Txt>
@@ -141,11 +145,12 @@ export default function Home() {
               accessibilityRole="button">
               <View style={s.diya}><Ionicons name="flame" size={22} color="#FFB300" /></View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Txt style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>{g.festival.name} in {g.festival.days_left} days</Txt>
+                <Txt style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>{g.festival.name} in {plural(g.festival.days_left, "day")}</Txt>
                 <Txt style={{ color: "#E6D8F5", fontSize: 12, marginTop: 2 }} numberOfLines={2}>
-                  Last year: {g.festival.top_items.slice(0, 2).map((i) => `${i.name} ${Number(i.uplift).toFixed(1)}×`).join(", ")}. Plan festival stock →
+                  Last year: {g.festival.top_items.slice(0, 2).map((i) => `${i.name} ${Number(i.uplift).toFixed(1)}×`).join(", ")}. Plan festival stock
                 </Txt>
               </View>
+              <Ionicons name="chevron-forward" size={20} color="#E6D8F5" />
             </Pressable>
           )}
 
@@ -154,7 +159,7 @@ export default function Home() {
               <Ionicons name="sparkles" size={18} color={colors.cyan} />
               <Txt style={{ marginLeft: 6, fontWeight: "800", color: colors.navy }}>Saathi AI</Txt>
             </Row>
-            <Txt style={[ui.h2, { marginBottom: 10 }]}>{data.brief.priorities.length} things need your attention</Txt>
+            <Txt style={[ui.h2, { marginBottom: 10 }]}>{data.brief.priorities.length === 1 ? "1 thing needs" : `${data.brief.priorities.length} things need`} your attention</Txt>
             <BriefList brief={data.brief} compact />
             <VoiceBrief />
             <WakeHint />
@@ -180,7 +185,11 @@ export default function Home() {
               <Row>
                 <Ionicons name="trophy" size={22} color={colors.green} />
                 <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Txt style={{ fontWeight: "800" }}>Saathi saved you {rupees(Number(g.impact.under_budget) + Number(g.impact.supplier_savings))}</Txt>
+                  <Txt style={{ fontWeight: "800" }}>
+                    {Number(g.impact.under_budget) + Number(g.impact.supplier_savings) > 0
+                      ? `Saathi saved you ${rupees(Number(g.impact.under_budget) + Number(g.impact.supplier_savings))}`
+                      : `Saathi collected ${rupees(g.impact.collected_via_links)} for you`}
+                  </Txt>
                   <Txt style={ui.muted}>{rupees(g.impact.collected_via_links)} collected · ~{g.impact.minutes_saved_estimate} min saved</Txt>
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -203,7 +212,7 @@ export default function Home() {
           <Card>
             {data.connections.map((c) => (
               <Row key={c.source} style={{ paddingVertical: 6 }}>
-                <Txt style={{ flex: 1, fontWeight: "600" }}>{c.source.charAt(0) + c.source.slice(1).toLowerCase()}</Txt>
+                <Txt style={{ flex: 1, fontWeight: "600" }}>{SOURCE_LABEL[c.source] ?? c.source}</Txt>
                 <Txt style={[ui.muted, { fontWeight: "700", color: c.mode === "OFF" ? colors.red : c.mode === "LIVE" ? colors.green : colors.violet }]}>
                   {c.mode}
                 </Txt>
@@ -234,5 +243,5 @@ const s = StyleSheet.create({
   diya: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
   impact: { backgroundColor: colors.greenSoft, borderWidth: 1, borderColor: "#BFE6CC" },
   approve: { borderWidth: 1, borderColor: "#FFE1A8", backgroundColor: "#FFFBF2" },
-  ai: { backgroundColor: "#FFF5F5", borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: "#FBE1E1", marginBottom: 4 },
+  ai: { backgroundColor: "#fff", borderRadius: radius.lg, padding: 16, borderWidth: 1, borderColor: "#D6EEF9", marginBottom: 4 },
 });

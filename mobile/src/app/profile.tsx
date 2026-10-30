@@ -44,7 +44,8 @@ export default function Profile() {
             <View style={{ flex: 1, marginLeft: 14 }}>
               <Txt style={{ fontSize: 18, fontWeight: "800" }}>{session.merchant.owner_name}</Txt>
               <Txt style={{ color: colors.inkSoft, fontWeight: "600" }}>{session.merchant.display_name}</Txt>
-              <Txt style={s.meta}>{session.merchant.locality} · {session.user.email}</Txt>
+              <Txt style={s.meta} numberOfLines={1}>{session.merchant.locality}</Txt>
+              <Txt style={s.meta} numberOfLines={1}>{session.user.email}</Txt>
               <Txt style={s.meta}>MID {session.merchant.id.slice(0, 8).toUpperCase()}{session.demo_mode ? " · DEMO" : ""}</Txt>
             </View>
           </View>
@@ -88,7 +89,7 @@ export default function Profile() {
 
         {items.map((it) => (
           <Pressable key={it.key} onPress={it.go} style={({ pressed }) => [s.row, pressed && { backgroundColor: "#F5F8FB" }]} accessibilityRole="button">
-            <Ionicons name={it.icon} size={26} color={colors.ink} style={{ width: 34 }} />
+            <Ionicons name={it.icon} size={24} color={colors.ink} style={{ width: 32 }} />
             <View style={s.rowBody}>
               <Txt style={s.rowText}>{t(it.key)}</Txt>
               {it.value && <Txt style={[s.meta, { marginRight: 6 }]}>{it.value}</Txt>}
@@ -129,7 +130,7 @@ const s = StyleSheet.create({
   voice: { marginHorizontal: 16, marginTop: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14 },
   voiceRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
   row: { flexDirection: "row", alignItems: "center", paddingLeft: 24, paddingRight: 20 },
-  rowBody: { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 26, borderBottomWidth: 1, borderBottomColor: colors.line, marginLeft: 12 },
-  rowText: { flex: 1, fontSize: 18, color: colors.ink },
+  rowBody: { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 20, borderBottomWidth: 1, borderBottomColor: colors.line, marginLeft: 12 },
+  rowText: { flex: 1, fontSize: 16, fontWeight: "500", color: colors.ink },
   btn: { minHeight: 50, borderRadius: radius.md, borderWidth: 1, flexDirection: "row", alignItems: "center", justifyContent: "center" },
 });

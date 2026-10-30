@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Button, ErrorBox, PageTitle, SimBadge, Skeleton, StateBadge, useLoad } from "@/components/ui";
-import { api, ApiError, rupees } from "@/lib/api";
+import { Button, ErrorBox, MoreLink, PageTitle, SimBadge, Skeleton, StateBadge, useLoad } from "@/components/ui";
+import { api, ApiError, day, plural, rupees } from "@/lib/api";
 
 const STARTABLE = ["PENDING", "FAILED", "EXPIRED"];
 
@@ -43,10 +42,10 @@ export default function Invoices() {
                   <td className="p-4 font-bold">{i.invoice_number} {i.link_mode && <SimBadge>{i.link_mode}</SimBadge>}</td>
                   <td>{i.customer_name}<div className="text-[11px] text-muted">{i.customer_phone_masked}</div></td>
                   <td className="text-right text-base font-extrabold">{rupees(i.amount)}</td>
-                  <td className={`px-4 ${i.days_overdue > 0 ? "font-semibold text-red" : "text-muted"}`}>{i.days_overdue > 0 ? `${i.days_overdue}d overdue` : i.due_date}</td>
+                  <td className={`px-4 whitespace-nowrap ${i.days_overdue > 0 ? "font-semibold text-red" : "text-muted"}`}>{i.days_overdue > 0 ? `${plural(i.days_overdue, "day")} overdue` : `Due ${day(i.due_date)}`}</td>
                   <td><StateBadge state={i.status} /></td>
                   <td className="p-4 text-right">
-                    {i.open_task_id ? <Link href={`/tasks/${i.open_task_id}`} className="font-bold text-[#0083AD]">Open task →</Link>
+                    {i.open_task_id ? <MoreLink href={`/tasks/${i.open_task_id}`}>Open task</MoreLink>
                       : STARTABLE.includes(i.status) ? <Button loading={busy === i.id} onClick={() => collect(i.id)}>Create payment link</Button> : null}
                   </td>
                 </tr>

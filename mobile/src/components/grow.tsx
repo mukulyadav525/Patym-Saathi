@@ -58,19 +58,24 @@ export function MiniBars({ values, height = 36, color = colors.cyan, highlightLa
 // Balance chart for the cash-flow forecast: bars above/below a zero line.
 export function BalanceChart({ points }: { points: { date: string; balance: string }[] }) {
   const values = points.map((p) => Number(p.balance));
-  const max = Math.max(...values.map(Math.abs), 1);
-  const H = 70;
+  const top = Math.max(...values, 0);
+  const bottom = Math.max(...values.map((v) => -v), 0);
+  const range = Math.max(top + bottom, 1);
+  // Space above and below the zero line in proportion to the data: no empty band when the balance never goes negative.
+  const TOTAL = 140;
+  const up = Math.round((top / range) * TOTAL);
+  const down = TOTAL - up;
   return (
     <View>
-      <Row style={{ height: H * 2 + 1, alignItems: "stretch", gap: 3 }}>
+      <Row style={{ height: TOTAL + 1, alignItems: "stretch", gap: 3 }}>
         {values.map((v, i) => (
-          <View key={points[i].date} style={{ flex: 1, justifyContent: "center" }}>
-            <View style={{ height: H, justifyContent: "flex-end" }}>
-              {v >= 0 && <View style={{ height: Math.max(2, (v / max) * H), backgroundColor: i === 0 ? colors.navy : colors.cyan, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />}
+          <View key={points[i].date} style={{ flex: 1 }}>
+            <View style={{ height: up, justifyContent: "flex-end" }}>
+              {v >= 0 && <View style={{ height: Math.max(2, (v / range) * TOTAL), backgroundColor: i === 0 ? colors.navy : colors.cyan, borderTopLeftRadius: 3, borderTopRightRadius: 3 }} />}
             </View>
             <View style={{ height: 1, backgroundColor: colors.line }} />
-            <View style={{ height: H }}>
-              {v < 0 && <View style={{ height: Math.max(2, (-v / max) * H), backgroundColor: colors.red, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 }} />}
+            <View style={{ height: down }}>
+              {v < 0 && <View style={{ height: Math.max(2, (-v / range) * TOTAL), backgroundColor: colors.red, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 }} />}
             </View>
           </View>
         ))}

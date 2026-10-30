@@ -1,11 +1,10 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
 
-import { Button, Card, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
-import { api, ApiError, rupees, type S } from "@/lib/api";
+import { Button, Card, ErrorBox, MoreLink, Note, PageTitle, Skeleton, useLoad } from "@/components/ui";
+import { api, ApiError, plural, rupees, type S } from "@/lib/api";
 
 const short = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
@@ -27,10 +26,10 @@ export default function Cashflow() {
             <div className={`card flex items-center gap-3 border p-5 ${shortfall > 0 ? "border-[#F3C5C5] bg-red-soft" : "border-[#BFE6CC] bg-green-soft"}`}>
               {shortfall > 0 ? <AlertTriangle className="size-6 text-red" /> : <CheckCircle2 className="size-6 text-green" />}
               <div className="flex-1">
-                <p className="font-extrabold">{shortfall > 0 ? `You may be short ${rupees(data.shortfall)} by ${short(data.first_negative_on!)}` : `Cash looks fine for ${data.days} days`}</p>
+                <p className="font-extrabold">{shortfall > 0 ? `You may be short ${rupees(data.shortfall)} by ${short(data.first_negative_on!)}` : `Cash looks fine for ${plural(data.days, "day")}`}</p>
                 <p className="text-sm text-ink-soft">Lowest point {rupees(data.lowest_balance)} on {short(data.lowest_on)}</p>
               </div>
-              {shortfall > 0 && <Link href="/payments" className="text-sm font-bold text-[#0083AD]">Collect dues →</Link>}
+              {shortfall > 0 && <MoreLink href="/invoices">Collect dues</MoreLink>}
             </div>
             <Card>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -76,7 +75,7 @@ export default function Cashflow() {
               <FiguresForm key={`${settings.data.cash_on_hand}|${settings.data.weekly_expenses}`} initial={settings.data}
                 missing={data.missing} onSaved={() => { void settings.reload(); void reload(); }} />
             )}
-            <div>{data.assumptions.map((a) => <p key={a} className="mb-1 text-xs text-muted">ⓘ {a}</p>)}</div>
+            <div>{data.assumptions.map((a) => <Note key={a}>{a}</Note>)}</div>
           </div>
         </div>
       )}

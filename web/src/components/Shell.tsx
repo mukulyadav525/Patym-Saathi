@@ -8,6 +8,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { RouteBar } from "@/components/RouteBar";
 import { Button } from "@/components/ui";
 import { API_BASE, ApiError } from "@/lib/api";
 import { AuthProvider, useAuth } from "@/lib/auth";
@@ -164,6 +165,7 @@ function Frame({ children }: { children: ReactNode }) {
           <button onClick={signOut} aria-label="Sign out" title="Sign out" className="rounded-full p-2 text-red hover:bg-red-soft"><LogOut className="size-5" /></button>
         </div>
       </header>
+      <RouteBar />
       <aside className="fixed top-16 bottom-0 left-0 hidden w-64 flex-col overflow-y-auto border-r border-line bg-white py-5 pr-3 lg:flex">
         {nav}
         {session.demo_mode && (

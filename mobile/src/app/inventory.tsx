@@ -3,7 +3,7 @@ import { View } from "react-native";
 
 import { Badge, Button, Card, Divider, Empty, ErrorState, Loading, Row, Screen, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api } from "@/lib/api";
-import { rupees, timeAgo, useLoad } from "@/lib/hooks";
+import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors } from "@/lib/theme";
 
 export default function InventoryScreen() {
@@ -18,7 +18,7 @@ export default function InventoryScreen() {
         <>
           {low.length > 0 && (
             <Card style={{ backgroundColor: colors.amberSoft, borderWidth: 1, borderColor: "#FFD48A" }}>
-              <Txt style={[ui.h3, { color: colors.amber }]}>{low.length} items below half a week’s demand</Txt>
+              <Txt style={[ui.h3, { color: colors.amber }]}>{plural(low.length, "item")} below half a week’s demand</Txt>
               <Txt style={[ui.muted, { marginTop: 2 }]}>{low.map((i) => i.name).join(", ")}</Txt>
               <Button label="Plan restock with Saathi" icon="sparkles" small style={{ marginTop: 10 }}
                 onPress={() => router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } })} />

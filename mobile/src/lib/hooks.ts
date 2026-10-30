@@ -62,6 +62,9 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   return { data, setData, error, loading, refreshing, reload: () => run("refresh") };
 }
 
+/** "1 day", "3 days". */
+export const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
 export const rupees = (value: string | number | null | undefined, decimals = 0) => {
   if (value === null || value === undefined) return "—";
   const n = typeof value === "string" ? Number(value) : value;

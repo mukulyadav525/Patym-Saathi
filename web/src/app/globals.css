@@ -59,3 +59,60 @@ body {
 .num {
   font-variant-numeric: tabular-nums;
 }
+
+/* Motion: short and calm. Pages fade up on entry, sections follow in a light stagger, loading shimmers. */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes shimmer {
+  from { background-position: -400px 0; }
+  to { background-position: 400px 0; }
+}
+@keyframes route-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(0.85); }
+}
+@keyframes rise {
+  from { transform: scaleY(0); }
+  to { transform: none; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.page-enter {
+  animation: page-in 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.page-enter > * {
+  animation: page-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.page-enter > :nth-child(2) { animation-delay: 40ms; }
+.page-enter > :nth-child(3) { animation-delay: 80ms; }
+.page-enter > :nth-child(4) { animation-delay: 120ms; }
+.page-enter > :nth-child(n + 5) { animation-delay: 160ms; }
+
+.shimmer {
+  background: linear-gradient(90deg, #fff 0%, #eef3f8 40%, #fff 80%) #fff;
+  background-size: 800px 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+
+.route-bar {
+  transform-origin: left;
+  animation: route-grow 1.6s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+}
+
+.bar-grow {
+  transform-origin: bottom;
+  animation: rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.reply-in {
+  animation: pop-in 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter, .page-enter > *, .shimmer, .route-bar, .bar-grow, .reply-in { animation: none; }
+}

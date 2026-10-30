@@ -23,7 +23,7 @@ export default function OffersScreen() {
 
   return (
     <Screen refreshing={slow.refreshing} onRefresh={reload}>
-      <TopBar title="Slow stock → offers" />
+      <TopBar title="Slow stock offers" />
       <Txt style={[ui.muted, { marginBottom: 12 }]}>
         Items that stopped selling tie up cash. Saathi drafts an offer; you share it with your customers. Saathi never sends messages.
       </Txt>

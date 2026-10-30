@@ -13,7 +13,7 @@ import {
 } from "@/components/ui";
 import { api, ApiError, type TaskDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { rupees, timeAgo, useLoad } from "@/lib/hooks";
+import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 import { playBase64, stopPlayback } from "@/lib/voice";
 
@@ -75,7 +75,7 @@ export default function TaskScreen() {
             </View>
           )}
           {task.time_to_plan_seconds != null && (
-            <Txt style={[ui.muted, { marginTop: 8, fontSize: 11 }]}>Plan ready {task.time_to_plan_seconds.toFixed(1)}s after the request</Txt>
+            <Txt style={[ui.muted, { marginTop: 8, fontSize: 11 }]}>Plan ready {task.time_to_plan_seconds < 1 ? "in under a second" : `${task.time_to_plan_seconds.toFixed(1)}s after the request`}</Txt>
           )}
         </Card>
 
@@ -154,11 +154,11 @@ export default function TaskScreen() {
       {pending && (
         <SafeAreaView edges={["bottom"]} style={s.bar}>
           <View style={{ flex: 1 }}>
-            <Txt style={ui.muted}>Approve to {pending.action_type === "SUPPLIER_ORDER" ? "place order" : "send link"}</Txt>
-            <Txt style={{ fontSize: 22, fontWeight: "800" }}>{rupees(pending.amount)}</Txt>
+            <Txt style={[ui.muted, { fontSize: 12 }]} numberOfLines={1}>{pending.action_type === "SUPPLIER_ORDER" ? "Order total" : "Link amount"}</Txt>
+            <Txt style={{ fontSize: 20, fontWeight: "800" }} numberOfLines={1} adjustsFontSizeToFit>{rupees(pending.amount)}</Txt>
           </View>
           <Button label="Reject" kind="danger" small loading={busy === "reject"} onPress={() => run("reject", () => api.reject(pending.id))} style={{ marginRight: 8 }} />
-          <Button label="Review & approve" small icon="shield-checkmark" onPress={() => setSheet(true)} />
+          <Button label="Approve" small icon="shield-checkmark" onPress={() => setSheet(true)} style={{ paddingHorizontal: 18 }} />
         </SafeAreaView>
       )}
       {pending && (
@@ -190,7 +190,7 @@ function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) 
           </Row>
           {plan.diff.map((d) => (
             <Txt key={d.name} style={{ marginTop: 2 }}>
-              {d.name} × {d.packs}: {d.from_supplier ?? "—"} {d.from_unit_price ? rupees(d.from_unit_price) : ""} is out of stock → {d.to_supplier} {rupees(d.to_unit_price)}
+              {d.name} × {d.packs}: {d.from_supplier ?? "—"} {d.from_unit_price ? rupees(d.from_unit_price) : ""} is out of stock, now from {d.to_supplier} {rupees(d.to_unit_price)}
               <Txt style={{ fontWeight: "800", color: colors.red }}> (+{rupees(d.delta)})</Txt>
             </Txt>
           ))}
@@ -244,7 +244,7 @@ function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) 
           </View>
         ))}
         <Row style={{ justifyContent: "space-between", marginTop: 10 }}>
-          <Txt style={{ fontWeight: "800" }}>{plan.total_packs} packs</Txt>
+          <Txt style={{ fontWeight: "800" }}>{plural(plan.total_packs, "pack")}</Txt>
           <Txt style={{ fontWeight: "800", fontSize: 17 }}>{rupees(plan.total)}</Txt>
         </Row>
         <Pressable onPress={() => setShowEvidence(!showEvidence)} style={{ marginTop: 12 }}>
@@ -306,7 +306,7 @@ function DuesBlock({ task, onChanged }: { task: TaskDetail; onChanged: () => Pro
         </Row>
         <Txt style={[ui.money, { marginTop: 10 }]}>{rupees(inv.amount)}</Txt>
         <Txt style={[ui.muted, inv.days_overdue > 0 && { color: colors.red, fontWeight: "600" }]}>
-          {inv.status === "PAID" ? "Paid" : inv.days_overdue > 0 ? `${inv.days_overdue} days overdue` : `Due ${inv.due_date}`}
+          {inv.status === "PAID" ? "Paid" : inv.days_overdue > 0 ? `${plural(inv.days_overdue, "day")} overdue` : `Due ${inv.due_date}`}
         </Txt>
         {inv.draft_message && (
           <View style={s.msg}>

@@ -17,7 +17,7 @@ export default function Payments() {
     <>
       <PageTitle title="Payments & settlements" sub="Only payments confirmed by a signed callback and a server-side status check appear as received."
         right={<Badge tone="violet">DEMO PAYMENTS</Badge>} />
-      {error && !data ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Skeleton /> : (
+      {error && !data ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Skeleton stats /> : (
         <>
           <div className="mb-6 grid gap-4 sm:grid-cols-3">
             <div className="card bg-navy p-5 text-white">

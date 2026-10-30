@@ -5,7 +5,7 @@ import { StyleSheet, View } from "react-native";
 import { SourceNote, Stat } from "@/components/grow";
 import { Button, Card, ErrorState, Loading, Row, Screen, TopBar, Txt } from "@/components/ui";
 import { api } from "@/lib/api";
-import { rupees, useLoad } from "@/lib/hooks";
+import { plural, rupees, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
 export default function ImpactScreen() {
@@ -19,9 +19,9 @@ export default function ImpactScreen() {
       {loading && !data ? <Loading /> : error && !data ? <ErrorState error={error} onRetry={reload} /> : data && (
         <>
           <View style={s.hero}>
-            <Txt style={{ color: "#C9F2DC", fontWeight: "700" }}>Saathi has saved you</Txt>
-            <Txt style={s.big}>{rupees(saved)}</Txt>
-            <Txt style={{ color: "#E3F7EC" }}>and about {hours > 0 ? `${hours} h ` : ""}{mins} min of work</Txt>
+            <Txt style={{ color: "#C9F2DC", fontWeight: "700" }}>{saved > 0 ? "Saathi has saved you" : "Collected with Saathi"}</Txt>
+            <Txt style={s.big}>{rupees(saved > 0 ? saved : data.collected_via_links)}</Txt>
+            <Txt style={{ color: "#E3F7EC" }}>{saved > 0 ? "on stock, " : "via Paytm links, "}and about {hours > 0 ? `${hours} h ` : ""}{mins} min of work</Txt>
           </View>
           {data.restocks_completed === 0 && data.payments_collected === 0 ? (
             <Card>
@@ -34,7 +34,7 @@ export default function ImpactScreen() {
             </Card>
           ) : null}
           <Row style={{ gap: 10, marginBottom: 10 }}>
-            <Stat label="Under budget" value={rupees(data.under_budget)} sub={`${data.restocks_completed} restocks`} tone={colors.green} />
+            <Stat label="Under budget" value={rupees(data.under_budget)} sub={plural(data.restocks_completed, "restock")} tone={colors.green} />
             <Stat label="Cheaper supplier" value={rupees(data.supplier_savings)} sub="vs costliest quote" tone={colors.green} />
           </Row>
           <Row style={{ gap: 10, marginBottom: 10 }}>

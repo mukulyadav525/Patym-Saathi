@@ -6,7 +6,7 @@ import { Alert, Platform, Pressable, StyleSheet, TextInput, View } from "react-n
 import { SourceNote } from "@/components/grow";
 import { Badge, Button, Card, Row, Screen, SectionTitle, StateBadge, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError, type Receipt } from "@/lib/api";
-import { rupees, timeAgo, useLoad } from "@/lib/hooks";
+import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
 const SAMPLE = "Gupta Distributors\nAtta 10kg x 4 @ 380 = 1520\nCheeni 1kg 10 42 420\nToor dal 1kg 3 150 450\nTotal 2390";
@@ -72,7 +72,7 @@ export default function BillsScreen() {
     try {
       const done = await api.confirmBill(draft.id, lines.map((l) => ({ product_id: l.product_id, packs: l.packs, unit_price: l.unit_price })),
         draft.supplier_name || undefined);
-      Alert.alert("Stock updated", `+${done.lines.reduce((s, l) => s + l.packs, 0)} packs added from this bill.`);
+      Alert.alert("Stock updated", `+${plural(done.lines.reduce((s, l) => s + l.packs, 0), "pack")} added from this bill.`);
       setDraft(null);
       setText("");
       history.reload();
@@ -96,7 +96,7 @@ export default function BillsScreen() {
 
   return (
     <Screen refreshing={history.refreshing} onRefresh={history.reload}>
-      <TopBar title="Supplier bill → stock" />
+      <TopBar title="Bill to stock" />
       {!draft ? (
         <>
           <Txt style={[ui.muted, { marginBottom: 12 }]}>Add a supplier bill. Saathi reads the items; you check every line. Stock changes only when you confirm.</Txt>
@@ -164,7 +164,7 @@ export default function BillsScreen() {
             )}
             {draft.bill_total && <SourceNote text={`Bill printed total ${rupees(draft.bill_total)} · lines read ${rupees(draft.total)}`} />}
           </Card>
-          <Button label={`Add ${totalPacks} packs to stock`} icon="checkmark-circle" loading={busy === "confirm"} disabled={lines.length === 0} onPress={() => void confirm()} />
+          <Button label={`Add ${plural(totalPacks, "pack")} to stock`} icon="checkmark-circle" loading={busy === "confirm"} disabled={lines.length === 0} onPress={() => void confirm()} />
           <Button label="Discard" kind="ghost" onPress={() => void discard()} style={{ marginTop: 4 }} />
         </>
       )}
@@ -177,7 +177,7 @@ export default function BillsScreen() {
               <Row key={r.id} style={[{ paddingVertical: 10 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.line }]}>
                 <View style={{ flex: 1 }}>
                   <Txt style={{ fontWeight: "700" }}>{r.supplier_name || "Supplier bill"}</Txt>
-                  <Txt style={ui.muted}>{r.lines.reduce((s2, l) => s2 + l.packs, 0)} packs · {timeAgo(r.created_at)}</Txt>
+                  <Txt style={ui.muted}>{plural(r.lines.reduce((s2, l) => s2 + l.packs, 0), "pack")} · {timeAgo(r.created_at)}</Txt>
                 </View>
                 {r.status === "DRAFT" ? (
                   <Pressable onPress={() => load(r)} hitSlop={8}><Txt style={{ color: "#0083AD", fontWeight: "700" }}>Review</Txt></Pressable>

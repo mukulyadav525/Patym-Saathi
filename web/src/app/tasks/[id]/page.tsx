@@ -1,12 +1,12 @@
 "use client";
 
-import { ArrowLeft, CheckCircle2, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, CheckCircle2, RefreshCw, ShieldCheck, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge, Button, Card, ErrorBox, SimBadge, Skeleton, StateBadge, useLoad } from "@/components/ui";
-import { api, ApiError, newKey, rupees, when, type TaskDetail } from "@/lib/api";
+import { api, ApiError, newKey, plural, rupees, when, type TaskDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/share";
 
@@ -57,7 +57,7 @@ export default function TaskPage() {
           <Card className="w-full border border-[#FFE1A8] bg-[#FFFBF2] sm:w-auto">
             <p className="text-xs font-semibold text-ink-soft">Approve to {pending.action_type === "SUPPLIER_ORDER" ? "place order" : "send link"}</p>
             <p className="num text-3xl font-extrabold">{rupees(pending.amount)}</p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex gap-2 [&>*]:flex-1 sm:[&>*]:flex-none">
               <Button kind="danger" loading={busy === "reject"} onClick={() => act("reject", () => api.reject(pending.id))}>Reject</Button>
               <Button onClick={() => setConfirming(true)}><ShieldCheck className="size-4" /> Review & approve</Button>
             </div>
@@ -72,10 +72,10 @@ export default function TaskPage() {
             <>
               {plan.diff.length > 0 && (
                 <Card className="border border-[#FFD48A] bg-amber-soft">
-                  <p className="font-extrabold text-amber">⇄ {pending ? "Plan changed — needs approval again" : "Plan changed after a supplier shortage"}</p>
+                  <p className="flex items-center gap-2 font-extrabold text-amber"><ArrowLeftRight className="size-4" /> {pending ? "Plan changed — needs approval again" : "Plan changed after a supplier shortage"}</p>
                   {plan.diff.map((d) => (
                     <p key={d.name} className="mt-1 text-sm">
-                      {d.name} × {d.packs}: {d.from_supplier} {rupees(d.from_unit_price)} is out of stock → {d.to_supplier} {rupees(d.to_unit_price)} <b className="text-red">(+{rupees(d.delta)})</b>
+                      {d.name} × {d.packs}: {d.from_supplier} {rupees(d.from_unit_price)} is out of stock, now from {d.to_supplier} {rupees(d.to_unit_price)} <b className="text-red">(+{rupees(d.delta)})</b>
                     </p>
                   ))}
                 </Card>
@@ -90,7 +90,19 @@ export default function TaskPage() {
                   <div className="absolute inset-y-0 left-0 bg-cyan" style={{ width: `${(Number(plan.total) / Number(plan.budget)) * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-navy" style={{ width: `${(Number(plan.committed_total) / Number(plan.budget)) * 100}%` }} />
                 </div>
-                <div className="mt-4 overflow-x-auto">
+                <ul className="num mt-4 divide-y divide-line text-sm sm:hidden">
+                  {plan.lines.map((l) => (
+                    <li key={`${l.product_id}-${l.supplier_name}`} className="flex items-start justify-between gap-3 py-2.5">
+                      <div className="min-w-0">
+                        <p><b>{l.name}</b> <span className="text-xs text-muted">{l.pack_label}</span> {l.status === "COMMITTED" && <Badge tone="navy">ordered</Badge>}</p>
+                        <p className="text-xs text-muted">{l.packs} × {rupees(l.unit_price)} · {l.supplier_name}{l.status !== "COMMITTED" && ` · ${l.stock} in stock, ${Number(l.sold_per_week).toFixed(0)}/wk`}</p>
+                      </div>
+                      <span className="shrink-0 font-bold">{rupees(l.line_total)}</span>
+                    </li>
+                  ))}
+                  <li className="flex justify-between py-2.5 font-extrabold"><span>{plan.total_packs} packs</span><span>{rupees(plan.total)}</span></li>
+                </ul>
+                <div className="mt-4 hidden overflow-x-auto sm:block">
                   <table className="num w-full min-w-[560px] text-sm">
                     <thead className="text-left text-xs text-muted">
                       <tr className="border-b border-line">
@@ -136,7 +148,7 @@ export default function TaskPage() {
               </div>
               <p className="num mt-2 text-3xl font-extrabold">{rupees(task.invoice.amount)}</p>
               <p className={`text-sm ${task.invoice.days_overdue > 0 ? "font-semibold text-red" : "text-muted"}`}>
-                {task.invoice.status === "PAID" ? "Paid" : task.invoice.days_overdue > 0 ? `${task.invoice.days_overdue} days overdue` : `Due ${task.invoice.due_date}`}
+                {task.invoice.status === "PAID" ? "Paid" : task.invoice.days_overdue > 0 ? `${plural(task.invoice.days_overdue, "day")} overdue` : `Due ${task.invoice.due_date}`}
               </p>
               {task.invoice.draft_message && <p className="mt-3 rounded-xl bg-bg p-3 text-sm"><span className="block text-xs text-muted">Message to customer</span>{task.invoice.draft_message}</p>}
               {task.invoice.link_url && (
@@ -239,7 +251,7 @@ export default function TaskPage() {
           </Card>
           <Card>
             <h2 className="mb-3 font-extrabold">Audit trail</h2>
-            {task.time_to_plan_seconds != null && <p className="mb-3 text-xs text-muted">Plan ready {task.time_to_plan_seconds.toFixed(1)}s after the request</p>}
+            {task.time_to_plan_seconds != null && <p className="mb-3 text-xs text-muted">Plan ready {task.time_to_plan_seconds < 1 ? "in under a second" : `${task.time_to_plan_seconds.toFixed(1)}s after the request`}</p>}
             <ol className="relative space-y-3 border-l-2 border-line pl-4">
               {task.events.map((e) => {
                 const exception = (e.details as { to?: string })?.to === "EXCEPTION";

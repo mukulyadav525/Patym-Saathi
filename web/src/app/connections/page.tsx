@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Badge, Button, Card, ErrorBox, PageTitle, SimBadge, Skeleton, useLoad } from "@/components/ui";
-import { api, ApiError, when } from "@/lib/api";
+import { api, ApiError, SOURCE_LABEL, when } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
 const MODE_TONE = { LIVE: "green", STAGING: "cyan", DEMO: "violet", SAMPLE: "violet", SIMULATED: "violet", OFF: "red" } as const;
@@ -36,7 +36,7 @@ export default function Connections() {
         <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {conns.data.map((c) => (
             <Card key={c.source}>
-              <div className="flex items-center justify-between"><b>{c.source}</b><Badge tone={MODE_TONE[c.mode as keyof typeof MODE_TONE] ?? "muted"}>{c.mode}</Badge></div>
+              <div className="flex items-center justify-between"><b>{SOURCE_LABEL[c.source] ?? c.source}</b><Badge tone={MODE_TONE[c.mode as keyof typeof MODE_TONE] ?? "muted"}>{c.mode}</Badge></div>
               <p className="mt-1 text-sm text-ink-soft">{c.description}</p>
               <p className="mt-2 text-[11px] text-muted">{c.consent_granted_at ? `Consent recorded ${when(c.consent_granted_at)}` : "Not connected — no consent recorded"}</p>
             </Card>

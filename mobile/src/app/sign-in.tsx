@@ -5,7 +5,7 @@ import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View 
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Brand, Button, Card, Txt, styles as ui } from "@/components/ui";
-import { API_BASE, ApiError } from "@/lib/api";
+import { ApiError, changeApiBase, getApiBase, SERVER_EDITABLE } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { colors, radius } from "@/lib/theme";
 
@@ -16,6 +16,7 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [server, setServer] = useState(getApiBase());
 
   const submit = async () => {
     setBusy(true);
@@ -69,15 +70,73 @@ export default function SignIn() {
           )}
           <Button label="Sign in" onPress={submit} loading={busy} disabled={!email || !password} style={{ marginTop: 16 }} />
         </Card>
-        <Txt style={[ui.muted, { textAlign: "center", marginTop: 8, fontSize: 11 }]}>
-          Hackathon prototype · sample data · API {API_BASE.replace(/^https?:\/\//, "")}
-        </Txt>
+        <ServerRow server={server} onChanged={setServer} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
+// Which laptop the app talks to. Editable only in demo builds (see SERVER_EDITABLE); checked before it's saved.
+function ServerRow({ server, onChanged }: { server: string; onChanged: (url: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(server.replace(/^http:\/\//, ""));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const shown = server.replace(/^https?:\/\//, "");
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(await changeApiBase(value));
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <View style={{ marginTop: 10 }}>
+        <Txt style={[ui.muted, { fontSize: 11, textAlign: "center" }]}>Hackathon prototype · sample data</Txt>
+        <View style={s.serverRow}>
+          <Txt style={[ui.muted, { fontSize: 11, flexShrink: 1 }]} numberOfLines={1}>Server {shown}</Txt>
+          {SERVER_EDITABLE && (
+            <Pressable onPress={() => setEditing(true)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Change server">
+              <Txt style={s.change}>Change</Txt>
+            </Pressable>
+          )}
+        </View>
+      </View>
+    );
+  }
+  return (
+    <Card style={{ marginTop: 12 }}>
+      <Txt style={s.label}>Server address</Txt>
+      <TextInput
+        value={value} onChangeText={setValue} autoCapitalize="none" autoCorrect={false} keyboardType="url" onSubmitEditing={save}
+        style={s.input} placeholder="192.168.1.5:8000" placeholderTextColor={colors.muted} accessibilityLabel="Server address"
+      />
+      <Txt style={[ui.muted, { fontSize: 12, marginTop: 6 }]}>The laptop running Saathi, on the same Wi-Fi as this phone.</Txt>
+      {error && (
+        <View style={s.error}>
+          <Ionicons name="alert-circle" size={16} color={colors.red} />
+          <Txt style={{ color: colors.red, marginLeft: 6, flex: 1, fontSize: 13 }}>{error}</Txt>
+        </View>
+      )}
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 12 }}>
+        <Button label="Cancel" kind="secondary" small style={{ flex: 1 }} onPress={() => { setEditing(false); setError(null); }} />
+        <Button label="Connect" small style={{ flex: 1 }} loading={busy} disabled={!value.trim()} onPress={() => void save()} />
+      </View>
+    </Card>
+  );
+}
+
 const s = StyleSheet.create({
+  serverRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 4, paddingHorizontal: 8 },
+  change: { color: "#0083AD", fontWeight: "700", fontSize: 12 },
   back: { width: 44, height: 44, marginLeft: 8, marginTop: 4, alignItems: "center", justifyContent: "center" },
   wrap: { flex: 1, justifyContent: "center", padding: 20 },
   hero: { alignItems: "center", marginBottom: 24 },

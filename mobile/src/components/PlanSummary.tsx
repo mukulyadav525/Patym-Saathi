@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { Row, StateBadge, Txt, styles as ui } from "@/components/ui";
 import type { TaskDetail } from "@/lib/api";
-import { rupees } from "@/lib/hooks";
+import { plural, rupees } from "@/lib/hooks";
 import { colors } from "@/lib/theme";
 
 /** Compact card body for a task (used in chat and inbox). */
@@ -17,7 +17,7 @@ export function PlanSummary({ task }: { task: TaskDetail }) {
         </Row>
         <Txt style={[ui.money, { marginTop: 6 }]}>{rupees(task.invoice.amount)}</Txt>
         <Txt style={ui.muted}>
-          {task.invoice.invoice_number} · {task.invoice.days_overdue} days overdue
+          {task.invoice.invoice_number} · {plural(task.invoice.days_overdue, "day")} overdue
         </Txt>
       </View>
     );
@@ -35,7 +35,7 @@ export function PlanSummary({ task }: { task: TaskDetail }) {
       </Row>
       <BudgetBar total={plan.total} budget={plan.budget} committed={plan.committed_total} />
       <Txt style={[ui.muted, { marginTop: 6 }]}>
-        {plan.lines.length} lines · {plan.total_packs} packs · {Array.from(new Set(plan.lines.map((l) => l.supplier_name))).join(" + ")}
+        {plural(plan.lines.length, "line")} · {plural(plan.total_packs, "pack")} · {Array.from(new Set(plan.lines.map((l) => l.supplier_name))).join(" + ")}
       </Txt>
     </View>
   );

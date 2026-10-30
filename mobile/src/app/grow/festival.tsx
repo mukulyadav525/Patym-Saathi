@@ -6,7 +6,7 @@ import { Alert, StyleSheet, View } from "react-native";
 import { Chips, SourceNote } from "@/components/grow";
 import { Button, Card, Empty, ErrorState, Loading, Row, Screen, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
-import { useLoad } from "@/lib/hooks";
+import { plural, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
 const BUDGETS = [8000, 10000, 12000];
@@ -41,7 +41,7 @@ export default function FestivalScreen() {
             <Row>
               <View style={s.diya}><Ionicons name="flame" size={26} color="#FFB300" /></View>
               <View style={{ flex: 1, marginLeft: 12 }}>
-                <Txt style={s.heroTitle}>{data.name} in {data.days_left} days</Txt>
+                <Txt style={s.heroTitle}>{data.name} in {plural(data.days_left, "day")}</Txt>
                 <Txt style={s.heroSub}>{new Date(data.date + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</Txt>
               </View>
             </Row>
@@ -54,7 +54,7 @@ export default function FestivalScreen() {
               <Row key={item.name} style={[s.row, i > 0 && s.rowLine]}>
                 <View style={{ flex: 1 }}>
                   <Txt style={ui.h3}>{item.name}</Txt>
-                  <Txt style={ui.muted}>{item.last_year_packs} packs that week vs ~{Number(item.normal_weekly).toFixed(0)} normally</Txt>
+                  <Txt style={ui.muted}>{plural(item.last_year_packs, "pack")} that week vs ~{Number(item.normal_weekly).toFixed(0)} normally</Txt>
                 </View>
                 <View style={s.uplift}><Txt style={s.upliftText}>{Number(item.uplift).toFixed(1)}×</Txt></View>
               </Row>

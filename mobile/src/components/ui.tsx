@@ -1,8 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import type { ComponentProps, ReactNode } from "react";
+import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -28,6 +31,24 @@ export function Txt({ style, children, ...rest }: ComponentProps<typeof Text>) {
   );
 }
 
+/** Content fades up once when a screen opens: hides the moment between navigation and the data arriving. */
+export function FadeIn({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const [t] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    let alive = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (!alive) return;
+      if (reduce) t.setValue(1);
+      else Animated.timing(t, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+    });
+    return () => {
+      alive = false;
+    };
+  }, [t]);
+  const translateY = t.interpolate({ inputRange: [0, 1], outputRange: [10, 0] });
+  return <Animated.View style={[style, { opacity: t, transform: [{ translateY }] }]}>{children}</Animated.View>;
+}
+
 export function Screen({
   children, refreshing, onRefresh, scroll = true, padded = true,
 }: { children: ReactNode; refreshing?: boolean; onRefresh?: () => void; scroll?: boolean; padded?: boolean }) {
@@ -46,10 +67,10 @@ export function Screen({
           refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={colors.cyan} /> : undefined}
           keyboardShouldPersistTaps="handled"
         >
-          {children}
+          <FadeIn>{children}</FadeIn>
         </ScrollView>
       ) : (
-        <View style={[{ flex: 1 }, padded && styles.pad]}>{children}</View>
+        <FadeIn style={[{ flex: 1 }, padded && styles.pad]}>{children}</FadeIn>
       )}
     </SafeAreaView>
   );
@@ -160,12 +181,33 @@ export function IconTile({ icon, tone = "cyan", size = 40 }: { icon: IconName; t
   );
 }
 
-export function Loading({ label = "Loading…" }: { label?: string }) {
+/** With a label: centred spinner (app start). Without: pulsing placeholder cards shaped like a screen's content. */
+export function Loading({ label }: { label?: string }) {
+  const [pulse] = useState(() => new Animated.Value(0.55));
+  useEffect(() => {
+    if (label) return;
+    const loop = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 650, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0.55, duration: 650, useNativeDriver: true }),
+    ]));
+    loop.start();
+    return () => loop.stop();
+  }, [label, pulse]);
+  if (label)
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.cyan} size="large" />
+        <Txt style={styles.muted}>{label}</Txt>
+      </View>
+    );
   return (
-    <View style={styles.center}>
-      <ActivityIndicator color={colors.cyan} size="large" />
-      <Txt style={styles.muted}>{label}</Txt>
-    </View>
+    <Animated.View style={{ opacity: pulse }} accessibilityLabel="Loading" accessibilityRole="progressbar">
+      <Row style={{ gap: 12, marginBottom: 12 }}>
+        <View style={[styles.skel, { flex: 1, height: 96 }]} />
+        <View style={[styles.skel, { flex: 1, height: 96 }]} />
+      </Row>
+      {[120, 76, 76, 76].map((h, i) => <View key={i} style={[styles.skel, { height: h, marginBottom: 12 }]} />)}
+    </Animated.View>
   );
 }
 
@@ -215,6 +257,7 @@ export const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontWeight: "800", color: colors.ink },
   link: { color: "#0083AD", fontWeight: "700", fontSize: 14 },
   center: { alignItems: "center", justifyContent: "center", padding: 24 },
+  skel: { backgroundColor: "#E6EDF5", borderRadius: radius.lg },
   muted: { color: colors.muted, fontSize: 13 },
   h1: { fontSize: 26, fontWeight: "800", color: colors.ink, letterSpacing: -0.5 },
   h2: { fontSize: 20, fontWeight: "800", color: colors.ink },

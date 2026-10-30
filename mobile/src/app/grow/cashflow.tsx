@@ -6,7 +6,7 @@ import { Alert, StyleSheet, Switch, TextInput, View } from "react-native";
 import { BalanceChart, SourceNote, Stat } from "@/components/grow";
 import { Button, Card, ErrorState, Loading, Row, Screen, SectionTitle, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError, type BusinessSettings } from "@/lib/api";
-import { rupees, useLoad } from "@/lib/hooks";
+import { plural, rupees, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
 const short = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
@@ -28,7 +28,7 @@ export default function CashflowScreen() {
             <Ionicons name={short_ > 0 ? "warning" : "checkmark-circle"} size={22} color={short_ > 0 ? colors.red : colors.green} />
             <View style={{ flex: 1, marginLeft: 10 }}>
               <Txt style={{ fontWeight: "800", fontSize: 16 }}>
-                {short_ > 0 ? `You may be short ${rupees(data.shortfall)} by ${short(data.first_negative_on!)}` : `Cash looks fine for ${data.days} days`}
+                {short_ > 0 ? `You may be short ${rupees(data.shortfall)} by ${short(data.first_negative_on!)}` : `Cash looks fine for ${plural(data.days, "day")}`}
               </Txt>
               <Txt style={[ui.muted, { marginTop: 2 }]}>Lowest point {rupees(data.lowest_balance)} on {short(data.lowest_on)}</Txt>
             </View>
@@ -47,10 +47,10 @@ export default function CashflowScreen() {
           )}
 
           <Card>
-            <Row style={{ justifyContent: "space-between", marginBottom: 10 }}>
-              <Txt style={ui.h3}>Next {data.days} days</Txt>
+            <Txt style={ui.h3}>Next {plural(data.days, "day")}</Txt>
+            <Row style={{ justifyContent: "space-between", marginTop: 6, marginBottom: 12 }}>
+              <Txt style={[ui.muted, { flex: 1, marginRight: 8 }]}>Include plan awaiting approval</Txt>
               <Row>
-                <Txt style={[ui.muted, { marginRight: 6 }]}>Include plan awaiting approval</Txt>
                 <Switch value={pending} onValueChange={setPending} trackColor={{ true: colors.cyan, false: colors.line }} thumbColor="#fff"
                   accessibilityLabel="Include plan awaiting approval" />
               </Row>

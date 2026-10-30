@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Badge, Button, Card, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
+import { Badge, Button, Card, ErrorBox, MoreLink, PageTitle, Skeleton, useLoad } from "@/components/ui";
 import { api, ApiError, rupees, type S } from "@/lib/api";
 
 export default function Grow() {
@@ -18,6 +18,7 @@ export default function Grow() {
   const [speech, setSpeech] = useState<S["SpeechOut"] | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const o = overview.data;
+  const saved = o ? Number(o.impact.under_budget) + Number(o.impact.supplier_savings) : 0;
 
   const run = async (label: string, fn: () => Promise<void>) => {
     setBusy(label);
@@ -114,9 +115,19 @@ export default function Grow() {
 
           <div className="space-y-6 lg:col-span-2">
             <div className="card bg-green p-6 text-white">
-              <p className="flex items-center gap-2 text-sm font-bold text-[#C9F2DC]"><Trophy className="size-4" /> Saathi has saved you</p>
-              <p className="num mt-1 text-4xl font-extrabold">{rupees(Number(o.impact.under_budget) + Number(o.impact.supplier_savings))}</p>
-              <p className="text-sm text-[#E3F7EC]">{rupees(o.impact.collected_via_links)} collected via links · ~{o.impact.minutes_saved_estimate} min saved</p>
+              <p className="flex items-center gap-2 text-sm font-bold text-[#C9F2DC]"><Trophy className="size-4" /> Saathi&apos;s impact</p>
+              {saved > 0 ? (
+                <>
+                  <p className="num mt-1 text-4xl font-extrabold">{rupees(saved)}</p>
+                  <p className="text-sm text-[#E3F7EC]">saved on stock · {rupees(o.impact.collected_via_links)} collected via links</p>
+                </>
+              ) : (
+                <>
+                  <p className="num mt-1 text-4xl font-extrabold">{rupees(o.impact.collected_via_links)}</p>
+                  <p className="text-sm text-[#E3F7EC]">collected via Paytm links · approve a restock to start saving on stock</p>
+                </>
+              )}
+              <p className="text-sm text-[#E3F7EC]">~{o.impact.minutes_saved_estimate} min of work saved</p>
               <p className="mt-2 text-[11px] text-[#E3F7EC]">{o.impact.restocks_completed} restocks · {o.impact.offers_drafted} offers drafted</p>
             </div>
 
@@ -151,7 +162,7 @@ export default function Grow() {
                 <Link href="/cashflow" className="rounded-xl border border-line p-3 hover:bg-bg"><p className="font-bold">Cash flow</p><p className={`text-xs ${Number(o.cash_shortfall) > 0 ? "text-red" : "text-muted"}`}>{Number(o.cash_shortfall) > 0 ? `Short ${rupees(o.cash_shortfall)}` : "Looks fine"}</p></Link>
                 <Link href="/bills" className="rounded-xl border border-line p-3 hover:bg-bg"><p className="font-bold">Bill to stock</p><p className="text-xs text-muted">Read a supplier bill</p></Link>
               </div>
-              {o.proactive_tasks > 0 && <p className="mt-3"><Badge tone="amber">{o.proactive_tasks} prepared by Saathi</Badge> <Link href="/inbox" className="text-sm font-bold text-[#0083AD]">Review in inbox →</Link></p>}
+              {o.proactive_tasks > 0 && <div className="mt-3 flex flex-wrap items-center justify-between gap-2"><Badge tone="amber">{o.proactive_tasks} prepared by Saathi</Badge><MoreLink href="/inbox">Review in inbox</MoreLink></div>}
             </Card>
           </div>
         </div>

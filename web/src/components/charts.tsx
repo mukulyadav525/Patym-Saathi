@@ -3,34 +3,33 @@ import { rupees } from "@/lib/api";
 
 const short = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 
-// Weekly sales as SVG bars (no chart dependency). Latest week in brand cyan.
+// Weekly sales as plain HTML bars (no chart dependency): text stays at its real size at every width.
+// Bars grow in on mount; the latest week is in brand cyan.
 export function SalesBars({ weeks }: { weeks: Dashboard["weekly_sales"] }) {
   const max = Math.max(...weeks.map((w) => Number(w.revenue)), 1);
-  const W = 520, H = 200, top = 22, bottom = 26, gap = 28;
-  const bw = (W - gap * (weeks.length + 1)) / weeks.length;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Weekly sales, last four weeks">
-      {[0.25, 0.5, 0.75, 1].map((f) => (
-        <line key={f} x1={0} x2={W} y1={top + (H - top - bottom) * (1 - f)} y2={top + (H - top - bottom) * (1 - f)} stroke="var(--line)" strokeDasharray="3 4" />
-      ))}
-      {weeks.map((w, i) => {
-        const h = ((H - top - bottom) * Number(w.revenue)) / max;
-        const x = gap + i * (bw + gap);
-        const y = H - bottom - h;
-        const last = i === weeks.length - 1;
-        return (
-          <g key={w.week_start}>
-            <title>{`Week of ${short(w.week_start)}: ${rupees(w.revenue)} · ${w.packs} packs`}</title>
-            <rect x={x} y={y} width={bw} height={h} rx={6} fill={last ? "var(--cyan)" : "#A9E3F8"} />
-            <text x={x + bw / 2} y={y - 6} textAnchor="middle" fontSize={12} fontWeight={700} fill={last ? "var(--navy)" : "var(--muted)"}>
-              {rupees(w.revenue)}
-            </text>
-            <text x={x + bw / 2} y={H - 6} textAnchor="middle" fontSize={12} fill="var(--muted)">{short(w.week_start)}</text>
-          </g>
-        );
-      })}
-      <line x1={0} x2={W} y1={H - bottom} y2={H - bottom} stroke="var(--line)" />
-    </svg>
+    <div role="img" aria-label="Weekly sales, last four weeks" className="relative pt-2">
+      <div className="pointer-events-none absolute inset-x-0 top-8 bottom-7 flex flex-col justify-between" aria-hidden>
+        {[0, 1, 2, 3].map((i) => <span key={i} className="border-t border-dashed border-line" />)}
+      </div>
+      <div className="relative flex h-52 items-end gap-3 border-b border-line sm:gap-5">
+        {weeks.map((w, i) => {
+          const last = i === weeks.length - 1;
+          const pct = Math.max((Number(w.revenue) / max) * 100, 2);
+          return (
+            <div key={w.week_start} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+              title={`Week of ${short(w.week_start)}: ${rupees(w.revenue)} · ${w.packs} packs`}>
+              <span className={`num mb-1 truncate text-xs font-bold sm:text-sm ${last ? "text-navy" : "text-muted"}`}>{rupees(w.revenue)}</span>
+              <div className={`bar-grow w-full max-w-20 rounded-t-lg ${last ? "bg-cyan" : "bg-[#A9E3F8]"}`}
+                style={{ height: `calc(${pct}% - 24px)`, animationDelay: `${i * 60}ms` }} />
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex gap-3 sm:gap-5">
+        {weeks.map((w) => <span key={w.week_start} className="flex-1 text-center text-xs text-muted">{short(w.week_start)}</span>)}
+      </div>
+    </div>
   );
 }
 

@@ -6,7 +6,7 @@ import { Alert, Pressable, Share, StyleSheet, View } from "react-native";
 import { SourceNote } from "@/components/grow";
 import { Badge, Button, Card, Empty, ErrorState, Loading, Row, Screen, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError, type KhataCustomer } from "@/lib/api";
-import { rupees, useLoad } from "@/lib/hooks";
+import { plural, rupees, useLoad } from "@/lib/hooks";
 import { colors, radius, type Tone } from "@/lib/theme";
 
 const LABEL_TONE: Record<string, Tone> = { "Pays on time": "green", "Sometimes late": "amber", "Pays late": "red", "New customer": "violet" };
@@ -21,7 +21,7 @@ export default function KhataScreen() {
           <View style={s.summary}>
             <Txt style={{ color: "#C9DDF5", fontWeight: "600" }}>Total udhaar outstanding</Txt>
             <Txt style={s.total}>{rupees(data.total_outstanding)}</Txt>
-            <Txt style={{ color: "#C9DDF5", fontSize: 12 }}>{data.customers.filter((c) => Number(c.outstanding) > 0).length} customers owe you · {data.source}</Txt>
+            <Txt style={{ color: "#C9DDF5", fontSize: 12 }}>{plural(data.customers.filter((c) => Number(c.outstanding) > 0).length, "customer")} owe you · {data.source}</Txt>
           </View>
           {data.customers.length === 0 ? <Empty icon="book-outline" title="No khata entries" /> :
             data.customers.map((c) => <CustomerCard key={c.customer_name} c={c} />)}
@@ -64,7 +64,7 @@ function CustomerCard({ c }: { c: KhataCustomer }) {
           <View style={{ alignItems: "flex-end" }}>
             <Txt style={{ fontSize: 20, fontWeight: "800", color: owes ? colors.ink : colors.green }}>{rupees(c.outstanding)}</Txt>
             <Txt style={[ui.muted, Number(c.advance) > 0 && !owes && { color: colors.green }]}>
-              {owes ? `oldest ${c.oldest_open_days} days` : Number(c.advance) > 0 ? `${rupees(c.advance)} advance` : "nothing due"}
+              {owes ? `oldest ${plural(c.oldest_open_days ?? 0, "day")}` : Number(c.advance) > 0 ? `${rupees(c.advance)} advance` : "nothing due"}
             </Txt>
           </View>
         </Row>

@@ -44,7 +44,7 @@ export function BriefList({ brief, compact }: { brief: Brief; compact?: boolean 
             key={p.title}
             onPress={() => act(p)}
             disabled={!p.action || busy !== null}
-            style={({ pressed }) => [{ paddingVertical: 10, opacity: pressed ? 0.7 : 1 }, i > 0 && { borderTopWidth: 1, borderTopColor: "#F5E3E3" }]}
+            style={({ pressed }) => [{ paddingVertical: 10, opacity: pressed ? 0.7 : 1 }, i > 0 && { borderTopWidth: 1, borderTopColor: colors.line }]}
           >
             <Row style={{ alignItems: "flex-start" }}>
               <Ionicons name={icon.icon} size={20} color={icon.color} style={{ marginTop: 1 }} />

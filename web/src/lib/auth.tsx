@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
 
-import { api, setToken, setUnauthorizedHandler, type LoginResponse } from "./api";
+import { clearLoadCache } from "@/components/ui";
+import { api, setToken, setUnauthorizedHandler, type LoginResponse } from "@/lib/api";
 
 const KEY = "saathi.web.session";
 type Auth = {
@@ -39,6 +40,7 @@ function readSession(): LoginResponse | null {
 }
 
 function writeSession(value: LoginResponse | null) {
+  clearLoadCache(); // never show one account's cached screens to the next
   try {
     if (value) sessionStorage.setItem(KEY, JSON.stringify(value));
     else sessionStorage.removeItem(KEY);

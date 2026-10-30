@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
 
-import { api, setToken, setUnauthorizedHandler, type LoginResponse } from "./api";
+import { api, loadApiBase, setToken, setUnauthorizedHandler, type LoginResponse } from "./api";
 
 const KEY = "saathi.session";
 
@@ -37,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnauthorizedHandler(() => void signOut());
     (async () => {
       try {
+        await loadApiBase(); // before any request: a demo phone may use a different laptop than the build default
         const saved = await store.get();
         if (saved) {
           const parsed = JSON.parse(saved) as LoginResponse;

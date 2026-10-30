@@ -4,7 +4,7 @@ import { CheckCircle2, Minus, Plus, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 
 import { Badge, Button, Card, PageTitle, StateBadge, useLoad } from "@/components/ui";
-import { api, ApiError, rupees, when, type S } from "@/lib/api";
+import { api, ApiError, plural, rupees, when, type S } from "@/lib/api";
 
 const SAMPLE = "Gupta Distributors\nAtta 10kg x 4 @ 380 = 1520\nCheeni 1kg 10 42 420\nToor dal 1kg 3 150 450\nTotal 2390";
 type Line = { product_id: string; name: string; pack_label: string; packs: number; unit_price: string | null };
@@ -34,7 +34,7 @@ export default function Bills() {
   const confirm = () => run("confirm", async () => {
     if (!draft) return;
     const done = await api.confirmBill(draft.id, lines.map((l) => ({ product_id: l.product_id, packs: l.packs, unit_price: l.unit_price })));
-    setNotice({ ok: true, text: `Stock updated: +${done.lines.reduce((s, l) => s + l.packs, 0)} packs.` });
+    setNotice({ ok: true, text: `Stock updated: +${plural(done.lines.reduce((s, l) => s + l.packs, 0), "pack")}.` });
     setDraft(null);
     setText("");
     void history.reload();
@@ -43,7 +43,7 @@ export default function Bills() {
 
   return (
     <>
-      <PageTitle title="Supplier bill → stock" sub="Saathi reads the bill; you check every line. Stock changes only when you confirm." />
+      <PageTitle title="Bill to stock" sub="Saathi reads the bill; you check every line. Stock changes only when you confirm." />
       {notice && <p className={`mb-4 rounded-xl p-3 text-sm ${notice.ok ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}>{notice.text}</p>}
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-6 lg:col-span-3">

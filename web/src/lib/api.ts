@@ -109,6 +109,19 @@ export const api = {
   discardBill: (id: string) => request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/discard`),
 };
 
+/** "19 Oct" from an ISO date. */
+export const day = (iso: string) => new Date(iso.length === 10 ? iso + "T00:00:00" : iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
+export const SOURCE_LABEL: Record<string, string> = {
+  INVENTORY: "Inventory", KHATA: "Khata", PAYTM: "Paytm payments", PEERS: "Nearby stores", POS: "POS sales", SARVAM: "Sarvam voice", SUPPLIER: "Suppliers",
+};
+
+/** "PAYMENT_LINK_CREATED" -> "Payment link created". */
+export const eventLabel = (type: string) => type.charAt(0) + type.slice(1).toLowerCase().replaceAll("_", " ");
+
+/** "1 day", "3 days". */
+export const plural = (n: number, word: string, many = `${word}s`) => `${n} ${n === 1 ? word : many}`;
+
 export const rupees = (v: string | number | null | undefined, d = 0) => {
   if (v == null) return "—";
   const n = Number(v);

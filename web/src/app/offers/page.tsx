@@ -58,7 +58,7 @@ export default function Offers() {
 
   return (
     <>
-      <PageTitle title="Slow stock → offers" sub="Items that stopped selling tie up cash. Saathi drafts the offer; you share it. Saathi never messages customers." />
+      <PageTitle title="Slow stock offers" sub="Items that stopped selling tie up cash. Saathi drafts the offer; you share it. Saathi never messages customers." />
       {notice && <p className="mb-4 rounded-xl bg-cyan-soft p-3 text-sm text-navy">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="space-y-4 lg:col-span-3">

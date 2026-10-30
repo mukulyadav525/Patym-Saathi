@@ -1,10 +1,11 @@
+import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, View } from "react-native";
 
 import { Button, Card, Empty, ErrorState, IconTile, Loading, Row, Screen, SectionTitle, StateBadge, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError, type Invoice } from "@/lib/api";
-import { rupees, useLoad } from "@/lib/hooks";
+import { plural, rupees, useLoad } from "@/lib/hooks";
 import { colors } from "@/lib/theme";
 
 const OPEN = ["PENDING", "DRAFTED", "APPROVED", "SENT", "RECONCILIATION_REQUIRED", "FAILED", "EXPIRED"];
@@ -23,7 +24,7 @@ export default function Dues() {
           <Card style={{ backgroundColor: colors.navy }}>
             <Txt style={{ color: "#B9D4F5", fontWeight: "600" }}>To collect</Txt>
             <Txt style={[ui.money, { color: "#fff" }]}>{rupees(total)}</Txt>
-            <Txt style={{ color: "#B9D4F5", fontSize: 13 }}>{open.length} open invoices</Txt>
+            <Txt style={{ color: "#B9D4F5", fontSize: 13 }}>{plural(open.length, "open invoice")}</Txt>
           </Card>
           {open.length === 0 && <Empty icon="checkmark-done-circle-outline" title="All dues collected" />}
           {open.map((i) => <InvoiceCard key={i.id} inv={i} />)}
@@ -55,7 +56,7 @@ function InvoiceCard({ inv }: { inv: Invoice }) {
         <IconTile icon="receipt-outline" tone={inv.status === "PAID" ? "green" : inv.days_overdue > 0 ? "red" : "amber"} />
         <View style={{ flex: 1, marginLeft: 12 }}>
           <Txt style={ui.h3}>{inv.customer_name}</Txt>
-          <Txt style={ui.muted}>{inv.invoice_number} · {inv.status === "PAID" ? "paid" : inv.days_overdue > 0 ? `${inv.days_overdue} days overdue` : `due ${inv.due_date}`}</Txt>
+          <Txt style={ui.muted}>{inv.invoice_number} · {inv.status === "PAID" ? "paid" : inv.days_overdue > 0 ? `${plural(inv.days_overdue, "day")} overdue` : `due ${inv.due_date}`}</Txt>
         </View>
         <View style={{ alignItems: "flex-end" }}>
           <Txt style={{ fontSize: 18, fontWeight: "800" }}>{rupees(inv.amount)}</Txt>
@@ -65,7 +66,12 @@ function InvoiceCard({ inv }: { inv: Invoice }) {
       {canStart && !inv.open_task_id && (
         <Button label="Create payment link" icon="link-outline" small style={{ marginTop: 12 }} loading={busy} onPress={collect} />
       )}
-      {inv.open_task_id && <Txt style={[ui.link, { marginTop: 10 }]}>Open task →</Txt>}
+      {inv.open_task_id && (
+        <Row style={{ marginTop: 10 }}>
+          <Txt style={ui.link}>Open task</Txt>
+          <Ionicons name="chevron-forward" size={14} color="#0083AD" />
+        </Row>
+      )}
     </Card>
   );
 }

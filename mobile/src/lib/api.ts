@@ -1,4 +1,5 @@
 import Constants from "expo-constants";
+import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 
 import type { components } from "@shared/api-types";
@@ -47,7 +48,63 @@ function defaultBaseUrl(): string {
   return host ? `http://${host}:8000` : "http://10.0.2.2:8000";
 }
 
-export const API_BASE = defaultBaseUrl();
+export const DEFAULT_API_BASE = defaultBaseUrl();
+
+// Demo builds talk to a laptop on the local Wi-Fi, whose address changes from venue to venue, so the server
+// can be changed on the sign-in screen and is remembered on the device. Builds that point at an https API
+// keep it fixed: credentials only ever go to the server the build was made for.
+export const SERVER_EDITABLE = DEFAULT_API_BASE.startsWith("http://");
+const SERVER_KEY = "saathi.server";
+let apiBase = DEFAULT_API_BASE;
+export const getApiBase = () => apiBase;
+
+const serverStore = {
+  get: async () => (Platform.OS === "web" ? globalThis.localStorage?.getItem(SERVER_KEY) ?? null : SecureStore.getItemAsync(SERVER_KEY)),
+  set: async (v: string) => (Platform.OS === "web" ? globalThis.localStorage?.setItem(SERVER_KEY, v) : SecureStore.setItemAsync(SERVER_KEY, v)),
+  clear: async () => (Platform.OS === "web" ? globalThis.localStorage?.removeItem(SERVER_KEY) : SecureStore.deleteItemAsync(SERVER_KEY)),
+};
+
+export async function loadApiBase() {
+  if (!SERVER_EDITABLE) return;
+  try {
+    apiBase = (await serverStore.get()) ?? DEFAULT_API_BASE;
+  } catch {
+    apiBase = DEFAULT_API_BASE;
+  }
+}
+
+/** "192.168.1.5", "192.168.1.5:8000" or a full URL -> "http://192.168.1.5:8000". Null when it isn't an address.
+ * Parsed by hand: React Native's URL has no hostname/port. */
+export function normalizeServer(input: string): string | null {
+  const m = /^(?:(https?):\/\/)?([a-z0-9.-]+)(?::(\d{1,5}))?\/?$/i.exec(input.trim());
+  if (!m || !/[a-z0-9]/i.test(m[2]) || m[2].startsWith(".") || m[2].endsWith(".")) return null;
+  const scheme = (m[1] ?? "http").toLowerCase();
+  const port = m[3] ?? (scheme === "https" ? "443" : "8000");
+  if (Number(port) < 1 || Number(port) > 65535) return null;
+  return `${scheme}://${m[2].toLowerCase()}:${port}`;
+}
+
+/** Checks the address answers as a Saathi API before saving it. */
+export async function changeApiBase(input: string): Promise<string> {
+  if (!SERVER_EDITABLE) throw new ApiError(0, "LOCKED", "This build always uses its own server");
+  const url = normalizeServer(input);
+  if (!url) throw new ApiError(0, "BAD_ADDRESS", "Enter an address like 192.168.1.5:8000");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await fetch(`${url}/health`, { signal: controller.signal });
+    const body = (await res.json()) as { status?: string };
+    if (!res.ok || body.status !== "ok") throw new Error("not saathi");
+  } catch {
+    throw new ApiError(0, "UNREACHABLE", `No Saathi server at ${url.replace(/^https?:\/\//, "")}. Same Wi-Fi as the laptop?`);
+  } finally {
+    clearTimeout(timer);
+  }
+  apiBase = url;
+  if (url === DEFAULT_API_BASE) await serverStore.clear();
+  else await serverStore.set(url);
+  return url;
+}
 
 let token: string | null = null;
 let onUnauthorized: (() => void) | null = null;
@@ -73,7 +130,7 @@ async function request<T>(method: "GET" | "POST", path: string, body?: unknown, 
   let res: Response;
   try {
     const isForm = typeof FormData !== "undefined" && body instanceof FormData;
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${apiBase}${path}`, {
       method,
       signal: controller.signal,
       headers: {
