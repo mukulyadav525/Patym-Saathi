@@ -66,10 +66,13 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
     setPhase(p);
   };
 
-  const startRecognition = useCallback(() => {
+  const startRecognition = useCallback(async () => {
     if (running.current || pauses.current.size > 0) return;
+    running.current = true;
     try {
-      running.current = true;
+      // An aborted session's "end" can arrive after a restart; trust the recognizer's own state, not our flag.
+      const state = await ExpoSpeechRecognitionModule.getStateAsync().catch(() => "inactive");
+      if (state !== "inactive") return;
       ExpoSpeechRecognitionModule.start({
         lang: "hi-IN", // Hindi recognizer also handles Hinglish and English words
         interimResults: true,
@@ -102,7 +105,7 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
   const scheduleRestart = useCallback((delay: number) => {
     if (restartTimer.current) clearTimeout(restartTimer.current);
     restartTimer.current = setTimeout(() => {
-      if (shouldListen()) startRecognition();
+      if (shouldListen()) void startRecognition();
     }, delay);
   }, [shouldListen, startRecognition]);
 
@@ -122,7 +125,7 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
     awakeTimer.current = setTimeout(() => {
       if (phaseRef.current === "awake") toIdle();
     }, AWAKE_TIMEOUT_MS);
-    if (!running.current) startRecognition();
+    if (!running.current) void startRecognition();
   }, [startRecognition, toIdle]);
 
   const ask = useCallback(async (spoken: string, confirmed?: string) => {
@@ -166,6 +169,7 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
   }, [goAwake, scheduleRestart, speakReplies, stopRecognition]);
 
   useSpeechRecognitionEvent("start", () => {
+    running.current = true;
     failures.current = 0;
   });
 
@@ -257,7 +261,7 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (phaseRef.current === "off") setP("idle");
-    if (wakeWord && pauses.current.size === 0) startRecognition();
+    if (wakeWord && pauses.current.size === 0) void startRecognition();
     else if (!wakeWord && phaseRef.current === "idle") stopRecognition();
   }, [enabled, wakeWord, startRecognition, stopRecognition]);
 
@@ -293,9 +297,9 @@ export function VoiceAgentProvider({ children }: { children: ReactNode }) {
       setP("error");
       return;
     }
-    stopRecognition();
+    // Keep a running session (wake-word listening) and just switch to "awake"; restarting would race with "end".
     goAwake();
-  }, [available, goAwake, stopRecognition]);
+  }, [available, goAwake]);
 
   const value = useMemo(() => ({ phase, available, activate, pause, resume, close }), [phase, available, activate, pause, resume, close]);
 
