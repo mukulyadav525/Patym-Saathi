@@ -1,6 +1,7 @@
 """Deterministic restock calculator (trd.txt §6). Pure functions: no DB, no LLM.
 
-forecast   = ceil(avg weekly packs over last 4 weeks * horizon_days / 7)
+forecast   = ceil(avg weekly packs over last 4 weeks * horizon_days / 7 * festival uplift)
+uplift     = last festival week packs / normal weekly packs before it (1 when not a festival plan)
 net_need   = max(0, forecast + safety - usable - inbound)
 order      = round_up(net_need, max(pack_size, min_order_packs))
 supplier   = cheapest valid quote with availability; partial at one supplier, rest at next
@@ -58,6 +59,7 @@ class PlanLine:
     unit_price: Decimal
     line_total: Decimal
     status: str = "NEW"  # NEW | COMMITTED
+    uplift: Decimal | None = None
 
 
 @dataclass
@@ -78,12 +80,19 @@ class BudgetExceeded(Exception):
         self.budget = budget
 
 
-def forecast_packs(weekly_sales: list[int], horizon_days: int) -> tuple[Decimal, int]:
+def festival_uplift(event_week_packs: int, baseline_weekly: Decimal) -> Decimal:
+    """Ratio of last festival week to the normal weeks before it, 2 decimals, never below 1."""
+    if baseline_weekly <= 0:
+        return Decimal("1.00")
+    return max(Decimal("1.00"), (Decimal(event_week_packs) / Decimal(baseline_weekly)).quantize(TWO_PLACES))
+
+
+def forecast_packs(weekly_sales: list[int], horizon_days: int, uplift: Decimal = Decimal("1")) -> tuple[Decimal, int]:
     recent = weekly_sales[-4:]
     if not recent:
         return Decimal("0"), 0
     avg = Decimal(sum(recent)) / Decimal(len(recent))
-    demand = avg * Decimal(horizon_days) / Decimal(7)
+    demand = avg * Decimal(horizon_days) / Decimal(7) * uplift
     return avg.quantize(Decimal("0.1")), math.ceil(demand)
 
 
@@ -125,6 +134,8 @@ def build_plan(
     safety_packs: int = 0,
     committed: list[PlanLine] | None = None,
     resource_only: dict[str, int] | None = None,
+    uplift: dict[str, Decimal] | None = None,
+    festival_name: str | None = None,
 ) -> PlanResult:
     """Build a plan.
 
@@ -140,7 +151,8 @@ def build_plan(
         quotes_by_product.setdefault(q.product_id, []).append(q)
 
     for item in items:
-        avg, forecast = forecast_packs(item.weekly_sales, horizon_days)
+        item_uplift = (uplift or {}).get(item.product_id)
+        avg, forecast = forecast_packs(item.weekly_sales, horizon_days, item_uplift or Decimal("1"))
         if resource_only is not None:
             if item.product_id not in resource_only:
                 continue
@@ -167,6 +179,7 @@ def build_plan(
                     quote_id=quote.quote_id,
                     unit_price=money(quote.unit_price),
                     line_total=money(quote.unit_price * take),
+                    uplift=item_uplift,
                 )
             )
         if unfilled:
@@ -184,8 +197,10 @@ def build_plan(
         total_packs=sum(line.packs for line in lines),
         unfillable=unfillable,
         assumptions=[
-            f"Demand horizon: {horizon_days} days until next restock (covers the weekend).",
-            "Demand = average weekly packs sold over the last 4 weeks (sample POS data).",
+            f"Demand horizon: {horizon_days} days until next restock"
+            + (f" (covers {festival_name} week)." if festival_name else " (covers the weekend)."),
+            "Demand = average weekly packs sold over the last 4 weeks (sample POS data)"
+            + (f" x each item's uplift in last year's {festival_name} week." if festival_name else "."),
             f"Safety stock: {safety_packs} packs per item.",
             "Quantities rounded up to pack size / supplier minimum order.",
             "Cheapest valid supplier quote chosen per item.",

@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     demo_password: str = "saathi-demo-2026"
     restock_safety_packs: int = 0
     approval_ttl_minutes: int = 10
+    # Proactive Saathi check (drafts tasks for approval). 0 = off; e.g. 1440 for once a day.
+    agent_scan_interval_min: int = 0
 
     # Paytm: demo | staging. Staging needs MID + merchant key.
     paytm_env: str = "demo"
@@ -34,9 +36,11 @@ class Settings(BaseSettings):
 
     # Sarvam (optional; text fallback when unset)
     sarvam_api_key: str | None = None
-    sarvam_stt_model: str = "saarika:v2.5"
-    sarvam_llm_model: str = "sarvam-m"
-    sarvam_tts_model: str = "bulbul:v2"
+    sarvam_stt_model: str = "saaras:v4"
+    sarvam_llm_model: str = "sarvam-105b"
+    sarvam_tts_model: str = "bulbul:v3"
+    sarvam_translate_model: str = "mayura:v1"
+    sarvam_docai_timeout_s: float = 25.0
 
     @property
     def cors_list(self) -> list[str]:

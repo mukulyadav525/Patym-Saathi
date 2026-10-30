@@ -34,3 +34,13 @@ def test_llm_candidate_cannot_override_rule_amount():
     assert gap.budget is None
     filled = merge_llm_candidate(parse("stock chahiye", CUSTOMERS), {"budget": 5000})
     assert filled.budget == Decimal("5000") and filled.needs_budget_confirmation
+
+
+def test_growth_topics():
+    from app.services.intent import parse
+    assert parse("kaunsa maal nahi bik raha?", []).topic == "OFFERS"
+    assert parse("mera khata dikhao", []).topic == "KHATA"
+    assert parse("cash kab kam padega", []).topic == "CASHFLOW"
+    assert parse("aas paas ki dukaan kya bech rahi hai", []).topic == "BENCHMARKS"
+    assert parse("Aman Stores ka pending payment collect karo", ["Aman Stores"]).intent == "COLLECT_DUE"
+    assert parse("Diwali ke liye ₹10,000 ke andar stock arrange karo", []).intent == "RESTOCK"

@@ -483,6 +483,334 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/growth/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Overview */
+        get: operations["overview_api_v1_growth_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/growth/festival": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Festival */
+        get: operations["festival_api_v1_growth_festival_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/growth/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Impact */
+        get: operations["impact_api_v1_growth_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/brief/speech": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Brief Speech */
+        get: operations["brief_speech_api_v1_brief_speech_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/languages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Languages */
+        get: operations["languages_api_v1_languages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/growth/slow-movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Slow Movers */
+        get: operations["slow_movers_api_v1_growth_slow_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Offers */
+        get: operations["list_offers_api_v1_offers_get"];
+        put?: never;
+        /** Create Offer */
+        post: operations["create_offer_api_v1_offers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/offers/{offer_id}/shared": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Offer Shared */
+        post: operations["offer_shared_api_v1_offers__offer_id__shared_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Translate
+         * @description Only drafts Saathi wrote for this merchant can be translated (no open text proxy).
+         */
+        post: operations["translate_api_v1_translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/khata": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Khata */
+        get: operations["khata_api_v1_khata_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cashflow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cashflow */
+        get: operations["cashflow_api_v1_cashflow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/business": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Business Settings */
+        get: operations["business_settings_api_v1_settings_business_get"];
+        put?: never;
+        /** Update Business Settings */
+        post: operations["update_business_settings_api_v1_settings_business_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Benchmarks */
+        get: operations["benchmarks_api_v1_benchmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agent/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Agent Scan */
+        post: operations["agent_scan_api_v1_agent_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Bills */
+        get: operations["list_bills_api_v1_bills_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bill From Text */
+        post: operations["bill_from_text_api_v1_bills_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bill From Photo */
+        post: operations["bill_from_photo_api_v1_bills_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/{receipt_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Bill */
+        post: operations["confirm_bill_api_v1_bills__receipt_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/bills/{receipt_id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard Bill */
+        post: operations["discard_bill_api_v1_bills__receipt_id__discard_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -558,6 +886,8 @@ export interface components {
              * @default []
              */
             suggestions: string[];
+            /** Open Screen */
+            open_screen?: string | null;
         };
         /** AuditOut */
         AuditOut: {
@@ -585,10 +915,58 @@ export interface components {
              */
             created_at: string;
         };
+        /** BenchmarkInsight */
+        BenchmarkInsight: {
+            /** Name */
+            name: string;
+            /** Diff Pct */
+            diff_pct: number;
+            /** Text */
+            text: string;
+        };
+        /** BenchmarkItem */
+        BenchmarkItem: {
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Yours */
+            yours: string;
+            /** Peers */
+            peers: string;
+            /** Diff Pct */
+            diff_pct: number;
+            /** Ran Low */
+            ran_low: boolean;
+        };
+        /** BenchmarksOut */
+        BenchmarksOut: {
+            /** Locality */
+            locality: string | null;
+            /** Peer Count */
+            peer_count: number;
+            /** Period */
+            period: string;
+            /** Items */
+            items: components["schemas"]["BenchmarkItem"][];
+            /** Insights */
+            insights: components["schemas"]["BenchmarkInsight"][];
+            /** Privacy */
+            privacy: string;
+            /** Source */
+            source: string;
+        };
         /** Body_assistant_voice_api_v1_assistant_voice_post */
         Body_assistant_voice_api_v1_assistant_voice_post: {
             /** Audio */
             audio: string;
+        };
+        /** Body_bill_from_photo_api_v1_bills_scan_post */
+        Body_bill_from_photo_api_v1_bills_scan_post: {
+            /** File */
+            file: string;
+            /** Supplier Name */
+            supplier_name?: string | null;
         };
         /** Brief */
         Brief: {
@@ -621,6 +999,86 @@ export interface components {
             action: components["schemas"]["BriefAction"] | null;
             /** Sources */
             sources: string[];
+        };
+        /** BusinessSettingsOut */
+        BusinessSettingsOut: {
+            /** Cash On Hand */
+            cash_on_hand: string | null;
+            /** Cash On Hand At */
+            cash_on_hand_at: string | null;
+            /** Weekly Expenses */
+            weekly_expenses: string | null;
+            /** Default Restock Budget */
+            default_restock_budget: string | null;
+        };
+        /** BusinessSettingsRequest */
+        BusinessSettingsRequest: {
+            /** Cash On Hand */
+            cash_on_hand?: string | null;
+            /** Weekly Expenses */
+            weekly_expenses?: string | null;
+            /** Default Restock Budget */
+            default_restock_budget?: string | null;
+        };
+        /** CashEvent */
+        CashEvent: {
+            /** Label */
+            label: string;
+            /** Amount */
+            amount: string;
+        };
+        /** CashPoint */
+        CashPoint: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Balance */
+            balance: string;
+            /** Events */
+            events: components["schemas"]["CashEvent"][];
+        };
+        /** CashflowOut */
+        CashflowOut: {
+            /** Opening */
+            opening: string;
+            /** Cash On Hand At */
+            cash_on_hand_at: string | null;
+            /** Weekly Expenses */
+            weekly_expenses: string;
+            /** Days */
+            days: number;
+            /** Series */
+            series: components["schemas"]["CashPoint"][];
+            /** Lowest Balance */
+            lowest_balance: string;
+            /**
+             * Lowest On
+             * Format: date
+             */
+            lowest_on: string;
+            /** Shortfall */
+            shortfall: string;
+            /** First Negative On */
+            first_negative_on: string | null;
+            /** Daily Sales */
+            daily_sales: string;
+            /** Daily Purchases */
+            daily_purchases: string;
+            /** Pending Plan */
+            pending_plan: string | null;
+            /** Assumptions */
+            assumptions: string[];
+            /** Missing */
+            missing: string[];
+        };
+        /** ConfirmReceiptRequest */
+        ConfirmReceiptRequest: {
+            /** Lines */
+            lines: components["schemas"]["ReceiptLineIn"][];
+            /** Supplier Name */
+            supplier_name?: string | null;
         };
         /** ConnectionOut */
         ConnectionOut: {
@@ -672,6 +1130,59 @@ export interface components {
             /** Overdue */
             overdue: string;
         };
+        /** FestivalItem */
+        FestivalItem: {
+            /** Name */
+            name: string;
+            /** Uplift */
+            uplift: string;
+            /** Last Year Packs */
+            last_year_packs: number;
+            /** Normal Weekly */
+            normal_weekly: string;
+        };
+        /** FestivalOut */
+        FestivalOut: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+            /** Name Hi */
+            name_hi: string;
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Days Left */
+            days_left: number;
+            /** Top Items */
+            top_items: components["schemas"]["FestivalItem"][];
+            /** Suggested Prompt */
+            suggested_prompt: string;
+            /** Source */
+            source: string;
+        };
+        /** GrowthOverview */
+        GrowthOverview: {
+            festival: components["schemas"]["FestivalOut"] | null;
+            impact: components["schemas"]["ImpactOut"];
+            /** Slow Movers */
+            slow_movers: number;
+            /** Slow Cash Tied Up */
+            slow_cash_tied_up: string;
+            /** Khata Outstanding */
+            khata_outstanding: string;
+            /** Khata Late Customers */
+            khata_late_customers: number;
+            /** Cash Shortfall */
+            cash_shortfall: string;
+            /** Cash First Negative On */
+            cash_first_negative_on: string | null;
+            benchmark_insight: components["schemas"]["BenchmarkInsight"] | null;
+            /** Proactive Tasks */
+            proactive_tasks: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -689,6 +1200,27 @@ export interface components {
             paytm_mode: string;
             /** Voice */
             voice: string;
+        };
+        /** ImpactOut */
+        ImpactOut: {
+            /** Restocks Completed */
+            restocks_completed: number;
+            /** Under Budget */
+            under_budget: string;
+            /** Supplier Savings */
+            supplier_savings: string;
+            /** Collected Via Links */
+            collected_via_links: string;
+            /** Payments Collected */
+            payments_collected: number;
+            /** Offers Drafted */
+            offers_drafted: number;
+            /** Avg Seconds To Plan */
+            avg_seconds_to_plan: number | null;
+            /** Minutes Saved Estimate */
+            minutes_saved_estimate: number;
+            /** Assumptions */
+            assumptions: string[];
         };
         /** InventoryItem */
         InventoryItem: {
@@ -752,6 +1284,69 @@ export interface components {
             /** Open Task Id */
             open_task_id: string | null;
         };
+        /** KhataCustomer */
+        KhataCustomer: {
+            /** Customer Name */
+            customer_name: string;
+            /** Phone Masked */
+            phone_masked: string;
+            /** Outstanding */
+            outstanding: string;
+            /** Oldest Open Days */
+            oldest_open_days: number | null;
+            /** Avg Days To Pay */
+            avg_days_to_pay: number | null;
+            /** Late Payments */
+            late_payments: number;
+            /** Payments */
+            payments: number;
+            /** Credit 90D */
+            credit_90d: string;
+            /** Label */
+            label: string;
+            /** Suggested Limit */
+            suggested_limit: string;
+            /** Open Invoice Id */
+            open_invoice_id: string | null;
+            /** Open Invoice Number */
+            open_invoice_number: string | null;
+            /** Reminder */
+            reminder: string | null;
+            /** History */
+            history: components["schemas"]["KhataHistory"][];
+        };
+        /** KhataHistory */
+        KhataHistory: {
+            /**
+             * Date
+             * Format: date
+             */
+            date: string;
+            /** Kind */
+            kind: string;
+            /** Amount */
+            amount: string;
+            /** Note */
+            note: string;
+        };
+        /** KhataOut */
+        KhataOut: {
+            /** Total Outstanding */
+            total_outstanding: string;
+            /** Customers */
+            customers: components["schemas"]["KhataCustomer"][];
+            /** Rules */
+            rules: string[];
+            /** Source */
+            source: string;
+        };
+        /** LanguageOut */
+        LanguageOut: {
+            /** Code */
+            code: string;
+            /** Name */
+            name: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -778,6 +1373,39 @@ export interface components {
             owner_name: string;
             /** Locality */
             locality: string;
+        };
+        /** OfferOut */
+        OfferOut: {
+            /** Id */
+            id: string;
+            /** Product Id */
+            product_id: string;
+            /** Product Name */
+            product_name: string;
+            /** Discount Pct */
+            discount_pct: number;
+            /** Offer Price */
+            offer_price: string;
+            /** Sell Price */
+            sell_price: string;
+            /** Message */
+            message: string;
+            /** Language */
+            language: string;
+            /** Status */
+            status: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** OfferRequest */
+        OfferRequest: {
+            /** Product Id */
+            product_id: string;
+            /** Discount Pct */
+            discount_pct: number;
         };
         /** OrderLineOut */
         OrderLineOut: {
@@ -868,6 +1496,8 @@ export interface components {
             line_total: string;
             /** Status */
             status: string;
+            /** Uplift */
+            uplift?: string | null;
         };
         /** PlanOut */
         PlanOut: {
@@ -899,6 +1529,15 @@ export interface components {
             sources: string[];
             /** Missing */
             missing: string[];
+            /** Festival */
+            festival?: string | null;
+            /**
+             * Festival Evidence
+             * @default []
+             */
+            festival_evidence: {
+                [key: string]: unknown;
+            }[];
             /**
              * Created At
              * Format: date-time
@@ -919,6 +1558,91 @@ export interface components {
             /** Mime */
             mime?: string | null;
         };
+        /** ReceiptLine */
+        ReceiptLine: {
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price: string | null;
+            /** Line Total */
+            line_total: string | null;
+            /** Source Text */
+            source_text?: string | null;
+        };
+        /** ReceiptLineIn */
+        ReceiptLineIn: {
+            /** Product Id */
+            product_id: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
+        /** ReceiptOut */
+        ReceiptOut: {
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
+            /** Source */
+            source: string;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Lines */
+            lines: components["schemas"]["ReceiptLine"][];
+            /** Total */
+            total: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /**
+             * Unmatched
+             * @default []
+             */
+            unmatched: string[];
+            /** Bill Total */
+            bill_total?: string | null;
+        };
+        /** ReceiptTextRequest */
+        ReceiptTextRequest: {
+            /** Text */
+            text: string;
+            /** Supplier Name */
+            supplier_name?: string | null;
+        };
+        /** ScanCreated */
+        ScanCreated: {
+            /** Task Id */
+            task_id: string;
+            /** Type */
+            type: string;
+            /** Title */
+            title: string;
+            /** Amount */
+            amount: string;
+        };
+        /** ScanOut */
+        ScanOut: {
+            /** Created */
+            created: components["schemas"]["ScanCreated"][];
+            /** Notes */
+            notes: string[];
+            /**
+             * Checked At
+             * Format: date-time
+             */
+            checked_at: string;
+        };
         /** SimpleResult */
         SimpleResult: {
             /** Ok */
@@ -937,6 +1661,57 @@ export interface components {
              * @description Demo-only override to test mismatches
              */
             amount?: string | null;
+        };
+        /** SlowMoverOut */
+        SlowMoverOut: {
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Name Hi */
+            name_hi: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Stock */
+            stock: number;
+            /** Weekly Sales */
+            weekly_sales: number[];
+            /** Avg Weekly */
+            avg_weekly: string;
+            /** Last Week */
+            last_week: number;
+            /** Weeks Of Cover */
+            weeks_of_cover: string | null;
+            /** Stock Value */
+            stock_value: string;
+            /** Cash Tied Up */
+            cash_tied_up: string;
+            /** Sell Price */
+            sell_price: string;
+            /** Unit Cost */
+            unit_cost: string | null;
+            /** Suggested Discount */
+            suggested_discount: number;
+            /** Offer Price */
+            offer_price: string;
+            /** Reason */
+            reason: string;
+        };
+        /** SpeechOut */
+        SpeechOut: {
+            /** Text */
+            text: string;
+            /** Language */
+            language: string;
+            /**
+             * Voice
+             * @enum {string}
+             */
+            voice: "LIVE" | "OFF";
+            /** Audio Base64 */
+            audio_base64?: string | null;
+            /** Mime */
+            mime?: string | null;
         };
         /** TaskDetail */
         TaskDetail: {
@@ -1039,6 +1814,30 @@ export interface components {
             approval: string;
             /** Llm Callable */
             llm_callable: boolean;
+        };
+        /** TranslateOut */
+        TranslateOut: {
+            /** Text */
+            text: string;
+            /** Language */
+            language: string;
+            /** Engine */
+            engine: string;
+        };
+        /** TranslateRequest */
+        TranslateRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "OFFER" | "INVOICE" | "KHATA";
+            /**
+             * Ref
+             * @description Offer id, invoice id, or customer name
+             */
+            ref: string;
+            /** Target */
+            target: string;
         };
         /** UserOut */
         UserOut: {
@@ -1974,6 +2773,682 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimpleResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    overview_api_v1_growth_overview_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GrowthOverview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    festival_api_v1_growth_festival_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FestivalOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    impact_api_v1_growth_impact_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    brief_speech_api_v1_brief_speech_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+                audio?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpeechOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    languages_api_v1_languages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguageOut"][];
+                };
+            };
+        };
+    };
+    slow_movers_api_v1_growth_slow_movers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlowMoverOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_offers_api_v1_offers_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_offer_api_v1_offers_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    offer_shared_api_v1_offers__offer_id__shared_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                offer_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfferOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    translate_api_v1_translate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    khata_api_v1_khata_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KhataOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cashflow_api_v1_cashflow_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                include_pending?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CashflowOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    business_settings_api_v1_settings_business_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_business_settings_api_v1_settings_business_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BusinessSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BusinessSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    benchmarks_api_v1_benchmarks_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarksOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_scan_api_v1_agent_scan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bills_api_v1_bills_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bill_from_text_api_v1_bills_text_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReceiptTextRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bill_from_photo_api_v1_bills_scan_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_bill_from_photo_api_v1_bills_scan_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_bill_api_v1_bills__receipt_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmReceiptRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    discard_bill_api_v1_bills__receipt_id__discard_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"];
                 };
             };
             /** @description Validation Error */

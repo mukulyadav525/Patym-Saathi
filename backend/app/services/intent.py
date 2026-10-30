@@ -18,16 +18,31 @@ MULTIPLIERS = {"hazaar": 1000, "hazar": 1000, "hajar": 1000, "thousand": 1000, "
 
 RESTOCK_WORDS = ("stock", "restock", "saman", "samaan", "maal", "order", "kharid", "inventory", "weekend")
 COLLECT_WORDS = ("payment", "dues", "due", "udhaar", "udhar", "collect", "paisa", "paise", "pending", "baki", "baaki")
+# Festival restock: matched before plain restock so "Diwali ka stock" gets the festival uplift.
+FESTIVAL_WORDS = {"DIWALI": ("diwali", "deepawali", "deepavali", "dhanteras", "दिवाली", "दीवाली", "tyohar", "tyohaar",
+                             "त्योहार", "festival")}
+# Growth questions answered from records with a link to the matching screen.
+GROWTH_WORDS = {
+    "OFFERS": ("nahi bik", "nahin bik", "slow", "offer", "discount", "chhoot", "dead stock", "pada hai"),
+    "KHATA": ("khata", "khaata", "udhaar kaun", "udhar kaun", "credit limit", "kaun late"),
+    "CASHFLOW": ("cash flow", "cashflow", "cash kab", "paise kam", "paisa kam", "cash kitna", "kitna cash"),
+    "BILLS": ("bill scan", "bill photo", "bill padh", "supplier bill", "maal aaya", "goods received"),
+    "BENCHMARKS": ("aas paas", "aaspaas", "nearby", "dusri dukan", "doosri dukaan", "other stores", "padosi"),
+    "IMPACT": ("kitna bachaya", "kitna bacha", "saved", "savings", "impact"),
+    "FESTIVAL": ("kab hai diwali", "festival kab", "tyohar kab"),
+}
 BRIEF_WORDS = ("aaj", "important", "brief", "report", "summary", "kya chal", "today", "priorities")
 
 
 @dataclass
 class ParsedIntent:
-    intent: str  # RESTOCK | COLLECT_DUE | BRIEF | UNKNOWN
+    intent: str  # RESTOCK | COLLECT_DUE | BRIEF | GROWTH | UNKNOWN
     budget: Decimal | None = None
     budget_from_words: bool = False
     customer: str | None = None
     horizon_days: int = 7
+    festival: str | None = None
+    topic: str | None = None
     confidence: str = "high"
     notes: list[str] = field(default_factory=list)
 
@@ -74,11 +89,16 @@ def parse(text: str, customers: list[str]) -> ParsedIntent:
     customer = match_customer(text, customers)
     has = lambda words: any(re.search(rf"\b{re.escape(w)}", lowered) for w in words)  # noqa: E731
 
+    topic = next((t for t, words in GROWTH_WORDS.items() if any(w in lowered for w in words)), None)
+    if topic and not customer and parse_amount(text)[0] is None:
+        return ParsedIntent("GROWTH", topic=topic)
     if customer or (has(COLLECT_WORDS) and not has(RESTOCK_WORDS)):
         return ParsedIntent("COLLECT_DUE", customer=customer, notes=[] if customer else ["Which customer?"])
-    if has(RESTOCK_WORDS):
-        horizon = 3 if re.search(r"\b(sirf|only)\s+weekend\b", lowered) else 7
-        parsed = ParsedIntent("RESTOCK", budget=amount, budget_from_words=from_words, horizon_days=horizon)
+    festival = next((code for code, words in FESTIVAL_WORDS.items() if any(w in lowered for w in words)), None)
+    if has(RESTOCK_WORDS) or festival:
+        horizon = 3 if re.search(r"\b(sirf|only)\s+weekend\b", lowered) and not festival else 7
+        parsed = ParsedIntent("RESTOCK", budget=amount, budget_from_words=from_words, horizon_days=horizon,
+                              festival=festival)
         if amount is None:
             parsed.notes.append("Budget missing")
         return parsed

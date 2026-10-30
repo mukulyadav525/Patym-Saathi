@@ -119,6 +119,7 @@ class PlanLineOut(BaseModel):
     unit_price: MoneyStr
     line_total: MoneyStr
     status: str
+    uplift: str | None = None
 
 
 class PlanDiff(BaseModel):
@@ -146,6 +147,8 @@ class PlanOut(BaseModel):
     assumptions: list[str]
     sources: list[str]
     missing: list[str]
+    festival: str | None = None
+    festival_evidence: list[dict[str, Any]] = []
     created_at: datetime
 
 
@@ -280,6 +283,7 @@ class AssistantResponse(BaseModel):
     brief: Brief | None = None
     needs_confirmation: dict[str, Any] | None = None
     suggestions: list[str] = []
+    open_screen: str | None = None  # festival | offers | khata | cashflow | bills | benchmarks | impact
 
 
 class SimulatePaymentRequest(BaseModel):
@@ -305,3 +309,259 @@ class ToolOut(BaseModel):
 class Page(BaseModel):
     items: list[AuditOut]
     next_cursor: str | None
+
+
+# ---------- growth features ----------
+
+class FestivalItem(BaseModel):
+    name: str
+    uplift: str
+    last_year_packs: int
+    normal_weekly: str
+
+
+class FestivalOut(BaseModel):
+    code: str
+    name: str
+    name_hi: str
+    date: date
+    days_left: int
+    top_items: list[FestivalItem]
+    suggested_prompt: str
+    source: str
+
+
+class ImpactOut(BaseModel):
+    restocks_completed: int
+    under_budget: MoneyStr
+    supplier_savings: MoneyStr
+    collected_via_links: MoneyStr
+    payments_collected: int
+    offers_drafted: int
+    avg_seconds_to_plan: float | None
+    minutes_saved_estimate: int
+    assumptions: list[str]
+
+
+class SlowMoverOut(BaseModel):
+    product_id: str
+    name: str
+    name_hi: str
+    pack_label: str
+    stock: int
+    weekly_sales: list[int]
+    avg_weekly: str
+    last_week: int
+    weeks_of_cover: str | None
+    stock_value: MoneyStr
+    cash_tied_up: MoneyStr
+    sell_price: MoneyStr
+    unit_cost: MoneyStr | None
+    suggested_discount: int
+    offer_price: MoneyStr
+    reason: str
+
+
+class OfferRequest(BaseModel):
+    product_id: str = Field(max_length=40)
+    discount_pct: int = Field(ge=5, le=30)
+
+
+class OfferOut(BaseModel):
+    id: str
+    product_id: str
+    product_name: str
+    discount_pct: int
+    offer_price: MoneyStr
+    sell_price: MoneyStr
+    message: str
+    language: str
+    status: str
+    created_at: datetime
+
+
+class TranslateRequest(BaseModel):
+    kind: Literal["OFFER", "INVOICE", "KHATA"]
+    ref: str = Field(min_length=1, max_length=120, description="Offer id, invoice id, or customer name")
+    target: str = Field(pattern=r"^[a-z]{2}-IN$")
+
+
+class TranslateOut(BaseModel):
+    text: str
+    language: str
+    engine: str
+
+
+class LanguageOut(BaseModel):
+    code: str
+    name: str
+
+
+class KhataHistory(BaseModel):
+    date: date
+    kind: str
+    amount: MoneyStr
+    note: str
+
+
+class KhataCustomer(BaseModel):
+    customer_name: str
+    phone_masked: str
+    outstanding: MoneyStr
+    oldest_open_days: int | None
+    avg_days_to_pay: float | None
+    late_payments: int
+    payments: int
+    credit_90d: MoneyStr
+    label: str
+    suggested_limit: MoneyStr
+    open_invoice_id: str | None
+    open_invoice_number: str | None
+    reminder: str | None
+    history: list[KhataHistory]
+
+
+class KhataOut(BaseModel):
+    total_outstanding: MoneyStr
+    customers: list[KhataCustomer]
+    rules: list[str]
+    source: str
+
+
+class CashEvent(BaseModel):
+    label: str
+    amount: MoneyStr
+
+
+class CashPoint(BaseModel):
+    date: date
+    balance: MoneyStr
+    events: list[CashEvent]
+
+
+class CashflowOut(BaseModel):
+    opening: MoneyStr
+    cash_on_hand_at: datetime | None
+    weekly_expenses: MoneyStr
+    days: int
+    series: list[CashPoint]
+    lowest_balance: MoneyStr
+    lowest_on: date
+    shortfall: MoneyStr
+    first_negative_on: date | None
+    daily_sales: MoneyStr
+    daily_purchases: MoneyStr
+    pending_plan: MoneyStr | None
+    assumptions: list[str]
+    missing: list[str]
+
+
+class BusinessSettingsRequest(BaseModel):
+    cash_on_hand: str | None = Field(default=None, max_length=14)
+    weekly_expenses: str | None = Field(default=None, max_length=14)
+    default_restock_budget: str | None = Field(default=None, max_length=14)
+
+
+class BusinessSettingsOut(BaseModel):
+    cash_on_hand: MoneyStr | None
+    cash_on_hand_at: datetime | None
+    weekly_expenses: MoneyStr | None
+    default_restock_budget: MoneyStr | None
+
+
+class BenchmarkItem(BaseModel):
+    product_id: str
+    name: str
+    yours: str
+    peers: str
+    diff_pct: int
+    ran_low: bool
+
+
+class BenchmarkInsight(BaseModel):
+    name: str
+    diff_pct: int
+    text: str
+
+
+class BenchmarksOut(BaseModel):
+    locality: str | None
+    peer_count: int
+    period: str
+    items: list[BenchmarkItem]
+    insights: list[BenchmarkInsight]
+    privacy: str
+    source: str
+
+
+class SpeechOut(BaseModel):
+    text: str
+    language: str
+    voice: Literal["LIVE", "OFF"]
+    audio_base64: str | None = None
+    mime: str | None = None
+
+
+class ScanCreated(BaseModel):
+    task_id: str
+    type: str
+    title: str
+    amount: MoneyStr
+
+
+class ScanOut(BaseModel):
+    created: list[ScanCreated]
+    notes: list[str]
+    checked_at: datetime
+
+
+class GrowthOverview(BaseModel):
+    festival: FestivalOut | None
+    impact: ImpactOut
+    slow_movers: int
+    slow_cash_tied_up: MoneyStr
+    khata_outstanding: MoneyStr
+    khata_late_customers: int
+    cash_shortfall: MoneyStr
+    cash_first_negative_on: date | None
+    benchmark_insight: BenchmarkInsight | None
+    proactive_tasks: int
+
+
+class ReceiptLine(BaseModel):
+    product_id: str
+    name: str
+    pack_label: str
+    packs: int
+    unit_price: MoneyStr | None
+    line_total: MoneyStr | None
+    source_text: str | None = None
+
+
+class ReceiptOut(BaseModel):
+    id: str
+    status: str
+    source: str
+    supplier_name: str
+    lines: list[ReceiptLine]
+    total: MoneyStr
+    created_at: datetime
+    confirmed_at: datetime | None
+    unmatched: list[str] = []
+    bill_total: MoneyStr | None = None
+
+
+class ReceiptTextRequest(BaseModel):
+    text: str = Field(min_length=3, max_length=5000)
+    supplier_name: str | None = Field(default=None, max_length=120)
+
+
+class ReceiptLineIn(BaseModel):
+    product_id: str = Field(max_length=40)
+    packs: int = Field(ge=1, le=1000)
+    unit_price: str | None = Field(default=None, max_length=12)
+
+
+class ConfirmReceiptRequest(BaseModel):
+    lines: list[ReceiptLineIn] = Field(min_length=1, max_length=60)
+    supplier_name: str | None = Field(default=None, max_length=120)

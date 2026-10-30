@@ -49,6 +49,11 @@ class Merchant(Base):
     locality: Mapped[str] = mapped_column(String(120), default="")
     paytm_mid: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE")
+    # Merchant-entered figures for the cash-flow forecast and Saathi's proactive restock.
+    cash_on_hand: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    cash_on_hand_at: Mapped[datetime | None] = ts(nullable=True)
+    weekly_expenses: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    default_restock_budget: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
     created_at: Mapped[datetime] = ts()
 
 
@@ -316,3 +321,76 @@ class IdempotencyRecord(Base):
     result_ref: Mapped[str | None] = mapped_column(String(80), nullable=True)
     created_at: Mapped[datetime] = ts()
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SalesEvent(Base):
+    """Item sales in a past festival week vs the normal weeks before it (festival demand evidence)."""
+    __tablename__ = "sales_events"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    product_id: Mapped[uuid.UUID] = fk("products.id")
+    event_code: Mapped[str] = mapped_column(String(20))  # DIWALI
+    event_name: Mapped[str] = mapped_column(String(60))
+    event_date: Mapped[date] = mapped_column(Date)
+    event_week_packs: Mapped[int] = mapped_column(Integer)
+    baseline_weekly_packs: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    source: Mapped[str] = mapped_column(String(20))  # SAMPLE | POS
+
+
+class KhataEntry(Base):
+    """Customer credit ledger (udhaar given / payment received). Separate from Paytm payment data."""
+    __tablename__ = "khata_entries"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    customer_name: Mapped[str] = mapped_column(String(120))
+    customer_phone_masked: Mapped[str] = mapped_column(String(32))
+    entry_date: Mapped[date] = mapped_column(Date)
+    kind: Mapped[str] = mapped_column(String(10))  # CREDIT | PAYMENT
+    amount: Mapped[Decimal] = mapped_column(Money)
+    note: Mapped[str] = mapped_column(String(200), default="")
+    source: Mapped[str] = mapped_column(String(20))  # SAMPLE | MANUAL
+
+
+class PeerBenchmark(Base):
+    """Aggregated, anonymised weekly sales of similar stores nearby (minimum peer count enforced in code)."""
+    __tablename__ = "peer_benchmarks"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    product_id: Mapped[uuid.UUID] = fk("products.id")
+    locality: Mapped[str] = mapped_column(String(120))
+    peer_median_weekly: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    peer_count: Mapped[int] = mapped_column(Integer)
+    period_label: Mapped[str] = mapped_column(String(60))
+    source: Mapped[str] = mapped_column(String(20))  # SAMPLE | PAYTM_AGG
+
+
+class Offer(Base):
+    """A customer offer drafted for a slow-moving item. The merchant shares it; Saathi never sends."""
+    __tablename__ = "offers"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    product_id: Mapped[uuid.UUID] = fk("products.id")
+    discount_pct: Mapped[int] = mapped_column(Integer)
+    offer_price: Mapped[Decimal] = mapped_column(Money)
+    message: Mapped[str] = mapped_column(Text)
+    language: Mapped[str] = mapped_column(String(10), default="hi-IN")
+    status: Mapped[str] = mapped_column(String(20), default="DRAFTED")  # DRAFTED | SHARED
+    created_by: Mapped[uuid.UUID | None] = fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = ts()
+
+
+class GoodsReceipt(Base):
+    """Supplier bill read from a photo or typed by the merchant. Stock changes only on CONFIRMED."""
+    __tablename__ = "goods_receipts"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    source: Mapped[str] = mapped_column(String(20))  # PHOTO | TEXT
+    supplier_name: Mapped[str] = mapped_column(String(120), default="")
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    lines: Mapped[list] = mapped_column(JSONB, default=list)
+    total: Mapped[Decimal] = mapped_column(Money, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="DRAFT")  # DRAFT | CONFIRMED | DISCARDED
+    created_by: Mapped[uuid.UUID | None] = fk("users.id", nullable=True)
+    confirmed_by: Mapped[uuid.UUID | None] = fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = ts()
+    confirmed_at: Mapped[datetime | None] = ts(nullable=True)

@@ -15,9 +15,12 @@ from app.models import (
     DataConnection,
     Inventory,
     Invoice,
+    KhataEntry,
     Merchant,
     MerchantMembership,
+    PeerBenchmark,
     Product,
+    SalesEvent,
     SalesWeekly,
     Supplier,
     SupplierQuote,
@@ -51,6 +54,8 @@ def reset(db: Session, today: date | None = None) -> None:
 
     merchant = _merchant(db, fx.MERCHANT, "DEMO_ADMIN")
     other = _merchant(db, fx.OTHER_MERCHANT, "OWNER")
+    merchant.cash_on_hand, merchant.cash_on_hand_at = fx.CASH_ON_HAND, now
+    merchant.weekly_expenses, merchant.default_restock_budget = fx.WEEKLY_EXPENSES, fx.DEFAULT_RESTOCK_BUDGET
 
     suppliers = {s["code"]: Supplier(code=s["code"], name=s["name"], connector_mode="SIMULATED") for s in fx.SUPPLIERS}
     db.add_all(suppliers.values())
@@ -68,6 +73,13 @@ def reset(db: Session, today: date | None = None) -> None:
             for week_start, sold in zip(week_starts, sales):
                 db.add(SalesWeekly(merchant_id=owner.id, product_id=product.id, week_start=week_start,
                                    packs_sold=sold, source="SAMPLE"))
+            event_packs, baseline = fx.FESTIVAL_SALES[sku]
+            db.add(SalesEvent(merchant_id=owner.id, product_id=product.id, event_code=fx.FESTIVAL["code"],
+                              event_name=fx.FESTIVAL["name"], event_date=date.fromisoformat(fx.FESTIVAL["last_date"]),
+                              event_week_packs=event_packs, baseline_weekly_packs=Decimal(baseline), source="SAMPLE"))
+            db.add(PeerBenchmark(merchant_id=owner.id, product_id=product.id, locality=fx.PEER_LOCALITY,
+                                 peer_median_weekly=Decimal(fx.PEER_MEDIANS[sku]), peer_count=fx.PEER_COUNT,
+                                 period_label="Last 4 weeks", source="SAMPLE"))
             for code, price, avail in (
                 ("A", price_a, fx.AVAILABLE_A),
                 ("B", price_b, fx.AVAILABLE_B.get(sku, fx.AVAILABLE_B_DEFAULT)),
@@ -83,6 +95,12 @@ def reset(db: Session, today: date | None = None) -> None:
     db.add(Invoice(merchant_id=other.id, customer_name="Other Customer", customer_phone_masked="+91 90000 0X999",
                    invoice_number="INV-9001", amount=Decimal("500"), status="PENDING", due_date=today))
 
+    for customer, phone, entries in fx.KHATA:
+        for offset, kind, amount, note in entries:
+            db.add(KhataEntry(merchant_id=merchant.id, customer_name=customer, customer_phone_masked=phone,
+                              entry_date=today + timedelta(days=offset), kind=kind, amount=Decimal(amount),
+                              note=note, source="SAMPLE"))
+
     paytm_mode = "STAGING" if settings.paytm_env == "staging" else "DEMO"
     for owner in (merchant, other):
         db.add_all([
@@ -94,6 +112,11 @@ def reset(db: Session, today: date | None = None) -> None:
                            description="Stock levels", consent_granted_at=now, last_sync_at=now),
             DataConnection(merchant_id=owner.id, source="SUPPLIER", mode="SIMULATED",
                            description="Gupta Distributors, Metro Wholesale", consent_granted_at=now, last_sync_at=now),
+            DataConnection(merchant_id=owner.id, source="KHATA", mode="SAMPLE",
+                           description="Customer credit ledger (udhaar)", consent_granted_at=now, last_sync_at=now),
+            DataConnection(merchant_id=owner.id, source="PEERS", mode="SAMPLE",
+                           description=f"Aggregated sales of {fx.PEER_COUNT} nearby stores (anonymised)",
+                           consent_granted_at=now, last_sync_at=now),
             DataConnection(merchant_id=owner.id, source="SARVAM", mode="LIVE" if sarvam.enabled() else "OFF",
                            description="Voice + language (text fallback when off)",
                            consent_granted_at=now if sarvam.enabled() else None,

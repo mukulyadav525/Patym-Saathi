@@ -97,9 +97,10 @@ def plan_out(plan: Plan) -> s.PlanOut:
         id=str(plan.id), version=plan.version, status=plan.status, reason=plan.reason, budget=m(plan.budget),
         total=m(plan.total), committed_total=m(plan.committed_total), remaining_budget=m(plan.budget - plan.total),
         total_packs=payload.get("total_packs", 0),
-        lines=[s.PlanLineOut(**{k: line[k] for k in s.PlanLineOut.model_fields}) for line in payload["lines"]],
+        lines=[s.PlanLineOut(**{k: line.get(k) for k in s.PlanLineOut.model_fields if k in line}) for line in payload["lines"]],
         diff=[s.PlanDiff(**d) for d in payload.get("diff", [])], assumptions=payload.get("assumptions", []),
         sources=evidence.get("sources", []), missing=evidence.get("missing", []), created_at=plan.created_at,
+        festival=payload.get("festival"), festival_evidence=evidence.get("festival", []),
     )
 
 

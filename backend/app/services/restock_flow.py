@@ -19,6 +19,7 @@ from app.models import (
     OrderLine,
     Plan,
     Product,
+    SalesEvent,
     SalesWeekly,
     Supplier,
     SupplierQuote,
@@ -27,7 +28,9 @@ from app.models import (
 )
 from app.services import audit
 from app.services.common import canonical_hash, move_order, move_task
-from app.services.restock import BudgetExceeded, ItemInput, PlanLine, PlanResult, QuoteInput, build_plan, money
+from app.services.restock import (
+    BudgetExceeded, ItemInput, PlanLine, PlanResult, QuoteInput, build_plan, festival_uplift, money,
+)
 
 OPEN_ORDER_STATES = ("ACCEPTED", "PARTIALLY_ACCEPTED")
 
@@ -125,8 +128,23 @@ def _line_dict(line: PlanLine) -> dict:
         "sold_per_week": f"{line.sold_per_week}", "stock": line.stock, "forecast": line.forecast,
         "packs": line.packs, "supplier_id": line.supplier_id, "supplier_name": line.supplier_name,
         "quote_id": line.quote_id, "unit_price": f"{line.unit_price:.2f}", "line_total": f"{line.line_total:.2f}",
-        "status": line.status,
+        "status": line.status, "uplift": f"{line.uplift}" if line.uplift is not None else None,
     }
+
+
+def festival_uplifts(db: Session, merchant_id: uuid.UUID, code: str) -> tuple[dict[str, Decimal], list[dict], str | None]:
+    """Per-item uplift from the merchant's own past festival week. Returns (uplifts, evidence, festival name)."""
+    rows = db.execute(select(SalesEvent, Product).join(Product, Product.id == SalesEvent.product_id)
+                      .where(SalesEvent.merchant_id == merchant_id, SalesEvent.event_code == code)).all()
+    uplifts, evidence, name = {}, [], None
+    for event, product in rows:
+        u = festival_uplift(event.event_week_packs, event.baseline_weekly_packs)
+        uplifts[str(product.id)] = u
+        name = event.event_name
+        evidence.append({"product_id": str(product.id), "name": product.name, "event_date": event.event_date.isoformat(),
+                         "event_week_packs": event.event_week_packs, "baseline_weekly": f"{event.baseline_weekly_packs}",
+                         "uplift": f"{u}", "source": event.source})
+    return uplifts, evidence, name
 
 
 def approval_payload(task: Task, plan: Plan) -> dict:
@@ -158,10 +176,17 @@ def draft_plan(
     settings = get_settings()
     items, quotes, evidence = _inputs(db, task.merchant_id, task.id)
     horizon = int(task.parsed_intent.get("horizon_days", 7))
+    uplifts, festival_name = None, None
+    if task.parsed_intent.get("festival"):
+        uplifts, festival_evidence, festival_name = festival_uplifts(db, task.merchant_id, task.parsed_intent["festival"])
+        evidence["festival"] = festival_evidence
+        evidence["sources"].append(f"Festival demand: last {festival_name} week vs the weeks before it (SAMPLE)")
+        if not uplifts:
+            evidence["missing"].append("No past festival sales found; using normal weekly demand")
     try:
         result: PlanResult = build_plan(
             items, quotes, budget, utcnow(), horizon_days=horizon, safety_packs=settings.restock_safety_packs,
-            committed=committed, resource_only=resource_only,
+            committed=committed, resource_only=resource_only, uplift=uplifts or None, festival_name=festival_name,
         )
     except BudgetExceeded as exc:
         raise ApiError(422, "BUDGET_EXCEEDED", str(exc), {"total": f"{exc.total:.2f}", "budget": f"{exc.budget:.2f}"})
@@ -183,6 +208,7 @@ def draft_plan(
         "evidence": evidence,
         "diff": diff or [],
         "horizon_days": horizon,
+        "festival": festival_name,
     }
     plan = Plan(task_id=task.id, version=version, budget=result.budget, total=result.total,
                 committed_total=result.committed_total, payload=payload, payload_hash="", status="ACTIVE",

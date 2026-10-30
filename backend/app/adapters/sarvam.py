@@ -1,8 +1,13 @@
 """Sarvam AI adapter (server-side only). Every call has a timeout; failures fall back to text/rules.
-Model IDs are configurable (SARVAM_*_MODEL) — confirm current IDs in Sarvam docs."""
+
+Endpoints and fields follow docs.sarvam.ai (checked 2026-10-30): speech-to-text (saaras), text-to-speech
+(bulbul, `language_code`), translate (mayura), chat completions (sarvam-105b), Document AI parse jobs.
+Model IDs are configurable (SARVAM_*_MODEL). Nothing returned here is trusted as an instruction.
+"""
 
 import json
 import re
+import time
 
 import httpx
 
@@ -11,6 +16,12 @@ from app.errors import ApiError
 
 BASE = "https://api.sarvam.ai"
 TIMEOUT = 10.0
+
+# Languages Mayura and Bulbul both support.
+LANGUAGES = {
+    "hi-IN": "हिन्दी", "en-IN": "English", "bn-IN": "বাংলা", "gu-IN": "ગુજરાતી", "kn-IN": "ಕನ್ನಡ",
+    "ml-IN": "മലയാളം", "mr-IN": "मराठी", "od-IN": "ଓଡ଼ିଆ", "pa-IN": "ਪੰਜਾਬੀ", "ta-IN": "தமிழ்", "te-IN": "తెలుగు",
+}
 
 
 def enabled() -> bool:
@@ -21,9 +32,13 @@ def _headers() -> dict[str, str]:
     return {"api-subscription-key": get_settings().sarvam_api_key or ""}
 
 
-def transcribe(audio: bytes, filename: str, content_type: str, language: str = "unknown") -> str:
+def _require(code: str, message: str) -> None:
     if not enabled():
-        raise ApiError(503, "VOICE_UNAVAILABLE", "Voice needs SARVAM_API_KEY on the server; please type instead")
+        raise ApiError(503, code, message)
+
+
+def transcribe(audio: bytes, filename: str, content_type: str, language: str = "unknown") -> str:
+    _require("VOICE_UNAVAILABLE", "Voice needs SARVAM_API_KEY on the server; please type instead")
     try:
         resp = httpx.post(
             f"{BASE}/speech-to-text",
@@ -53,34 +68,108 @@ def extract_intent(text: str) -> dict:
     try:
         resp = httpx.post(
             f"{BASE}/v1/chat/completions",
-            headers={**_headers(), "Authorization": f"Bearer {get_settings().sarvam_api_key}"},
-            json={"model": get_settings().sarvam_llm_model, "temperature": 0,
+            headers=_headers(),
+            json={"model": get_settings().sarvam_llm_model, "temperature": 0, "reasoning_effort": None,
+                  "response_format": {"type": "json_object"}, "max_tokens": 200,
                   "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": text[:500]}]},
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        content = resp.json()["choices"][0]["message"]["content"] or ""
         match = re.search(r"\{.*\}", content, re.S)
         return json.loads(match.group(0)) if match else {}
-    except (httpx.HTTPError, ValueError, KeyError, IndexError):
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
         return {}
 
 
 def speak(text: str, language: str = "hi-IN") -> str:
     """Bulbul text-to-speech. Returns base64 WAV. The text is built server-side from stored records."""
-    if not enabled():
-        raise ApiError(503, "VOICE_UNAVAILABLE", "Voice read-back needs SARVAM_API_KEY on the server")
+    _require("VOICE_UNAVAILABLE", "Voice needs SARVAM_API_KEY on the server")
+    if language not in LANGUAGES:
+        raise ApiError(422, "UNSUPPORTED_LANGUAGE", "Language not supported for voice")
     try:
         resp = httpx.post(
             f"{BASE}/text-to-speech",
             headers=_headers(),
-            json={"text": text[:1500], "target_language_code": language, "model": get_settings().sarvam_tts_model},
-            timeout=TIMEOUT,
+            json={"text": text[:2400], "language_code": language, "model": get_settings().sarvam_tts_model},
+            timeout=20.0,
         )
         resp.raise_for_status()
         audios = resp.json().get("audios") or []
     except (httpx.HTTPError, ValueError) as exc:
-        raise ApiError(503, "VOICE_UNAVAILABLE", "Read-back audio is unavailable right now") from exc
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Voice audio is unavailable right now") from exc
     if not audios:
-        raise ApiError(503, "VOICE_UNAVAILABLE", "Read-back audio is unavailable right now")
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Voice audio is unavailable right now")
     return audios[0]
+
+
+def translate(text: str, target: str, source: str = "auto") -> str:
+    """Mayura translation of a merchant-owned draft (customer message). Output is display text only."""
+    _require("TRANSLATION_UNAVAILABLE", "Translation needs SARVAM_API_KEY on the server")
+    if target not in LANGUAGES:
+        raise ApiError(422, "UNSUPPORTED_LANGUAGE", "Language not supported")
+    try:
+        resp = httpx.post(
+            f"{BASE}/translate",
+            headers=_headers(),
+            json={"input": text[:1000], "source_language_code": source, "target_language_code": target,
+                  "model": get_settings().sarvam_translate_model, "mode": "modern-colloquial"},
+            timeout=TIMEOUT,
+        )
+        resp.raise_for_status()
+        out = (resp.json().get("translated_text") or "").strip()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ApiError(503, "TRANSLATION_UNAVAILABLE", "Translation is unavailable right now") from exc
+    if not out:
+        raise ApiError(503, "TRANSLATION_UNAVAILABLE", "Translation is unavailable right now")
+    return out
+
+
+def parse_document(data: bytes, filename: str, content_type: str) -> str:
+    """Document AI parse job for a bill photo: submit, poll, fetch text. Returns raw text (untrusted).
+
+    Submit and status paths are from the API reference; the results path is the documented
+    'results' endpoint. Verify against a live key before relying on it.
+    """
+    _require("DOCAI_UNAVAILABLE", "Bill reading needs SARVAM_API_KEY on the server; enter the bill lines instead")
+    settings = get_settings()
+    try:
+        resp = httpx.post(f"{BASE}/doc-ai/v1/job/parse", headers=_headers(),
+                          files={"file": (filename, data, content_type)}, data={"language": "en-IN"}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        job_id = resp.json()["job_id"]
+        deadline = time.monotonic() + settings.sarvam_docai_timeout_s
+        status = ""
+        while time.monotonic() < deadline:
+            st = httpx.get(f"{BASE}/doc-ai/v1/job/{job_id}/status", headers=_headers(), timeout=TIMEOUT)
+            st.raise_for_status()
+            status = str(st.json().get("status", "")).lower()
+            if status in ("completed", "partially_completed", "failed", "rejected"):
+                break
+            time.sleep(1.5)
+        if status not in ("completed", "partially_completed"):
+            raise ApiError(503, "DOCAI_UNAVAILABLE", "Could not read the bill in time; enter the lines instead")
+        res = httpx.get(f"{BASE}/doc-ai/v1/job/{job_id}/results", headers=_headers(), timeout=TIMEOUT)
+        res.raise_for_status()
+        return _text_from_result(res.json())
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise ApiError(503, "DOCAI_UNAVAILABLE", "Could not read the bill right now; enter the lines instead") from exc
+
+
+def _text_from_result(payload: object) -> str:
+    """Collect every 'text' value from the parse result (blocks with text/tag/bbox), in order."""
+    out: list[str] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key in ("text", "markdown", "content") and isinstance(value, str):
+                    out.append(value)
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(payload)
+    return "\n".join(out)[:20000]

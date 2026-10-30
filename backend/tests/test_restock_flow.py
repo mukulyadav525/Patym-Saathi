@@ -55,7 +55,8 @@ def test_full_restock_scenario(client, auth):
     assert "₹150.00 under" in task["result_note"]
     after = stock(client, auth)
     assert sum(after.values()) - sum(before.values()) == 31
-    assert after == {"ATTA10": 6, "RICE5": 5, "SUGAR1": 20, "TOOR1": 8, "OIL1": 9, "TEA250": 6}
+    assert after == {"ATTA10": 6, "RICE5": 5, "SUGAR1": 20, "TOOR1": 8, "OIL1": 9, "TEA250": 6,
+                     "NOODLE12": 14, "HAIROIL": 18}  # slow movers untouched
     types = [e["event_type"] for e in task["events"]]
     assert types.count("APPROVAL_CONFIRMED") == 2 and "APPROVAL_SUPERSEDED" not in types
 
