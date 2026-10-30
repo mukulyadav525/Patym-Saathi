@@ -114,7 +114,7 @@ export default function Overview() {
       <div className="mb-6">
         <form onSubmit={ask} className="card flex items-center gap-2 p-2 pl-4">
           <input value={text} onChange={(e) => setText(e.target.value)} maxLength={500} aria-label="Ask Saathi"
-            placeholder='Ask Saathi, e.g. "atta kitna bacha hai?"' className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none" />
+            placeholder="Ask Saathi anything…" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none" />
           <button type="button" onClick={toggleMic} aria-label={listening ? "Stop listening" : "Ask by voice"}
             className={`relative flex size-11 shrink-0 items-center justify-center rounded-full transition ${listening ? "bg-red text-white" : "bg-cyan-soft text-navy hover:bg-[#d4f1fb]"}`}>
             {listening && <span className="absolute inset-0 animate-ping rounded-full bg-red/40" />}
