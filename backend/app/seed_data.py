@@ -6,7 +6,7 @@ MERCHANT = {
     "display_name": "Sharma Kirana Store",
     "owner_name": "Rajesh Sharma",
     "locality": "Lajpat Nagar, New Delhi",
-    "email": "owner@sharma.demo",
+    "email": "mukul24360@iiitd.ac.in",
 }
 OTHER_MERCHANT = {
     "display_name": "Test Store B",

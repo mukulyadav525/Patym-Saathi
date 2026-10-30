@@ -168,3 +168,29 @@ def test_assistant_growth_answers(client, auth):
     assert r["intent"] == "GROWTH" and r["open_screen"] == "offers" and "Instant noodles" in r["reply"]
     r = ask(client, auth, "mera khata dikhao")
     assert r["open_screen"] == "khata" and "₹2,850" in r["reply"]
+
+
+def test_translation_number_guard():
+    from app.adapters.sarvam import numbers_preserved
+    assert numbers_preserved("Sales ₹9,130, 3 items", "विक्री ₹9,130, 3 वस्तू")
+    assert numbers_preserved("Pay ₹1,200", "পরিশোধ ১,২০০ টাকা")  # Bengali digits are fine
+    assert not numbers_preserved("Sales ₹9,130", "विक्री ₹9,131")
+    assert not numbers_preserved("₹1,200 in 5 days", "₹1,200 6 दिवसांत")
+
+
+def test_docai_html_table_flattened_and_parsed():
+    from app.adapters.sarvam import _text_from_result
+    from app.models import Product
+    from app.services.bills import parse_bill_text
+    payload = {"documents": [{"pages": [{"blocks": [{"text": "<table><tr><td colspan=\"4\">METRO WHOLESALE TRADERS</td></tr>"
+               "<tr><td>Sugar 1kg</td><td>12</td><td>44</td><td>528</td></tr><tr><td>Tea 250g</td><td>5</td><td>140</td>"
+               "<td>700</td></tr><tr><td>Total</td><td></td><td></td><td>1,228</td></tr></table>"}]}]}]}
+    text = _text_from_result(payload)
+    assert "Sugar 1kg  12  44  528" in text
+    with SessionLocal() as db:
+        mid = db.query(Product).first().merchant_id
+        products = db.query(Product).filter(Product.merchant_id == mid).all()
+        parsed = parse_bill_text(text, products)
+    got = {line["name"]: (line["packs"], line["unit_price"]) for line in parsed["lines"]}
+    assert got == {"Sugar": (12, "44.00"), "Tea": (5, "140.00")} and parsed["bill_total"] == "1228.00"
+    assert parsed["supplier_name"] == "METRO WHOLESALE TRADERS"

@@ -27,6 +27,12 @@ def draft_message(invoice: Invoice, merchant: Merchant) -> str:
     )
 
 
+def draft_message_en(invoice: Invoice, merchant: Merchant) -> str:
+    """English source used for translation into other Indian languages (clearer than Hinglish for Mayura)."""
+    return (f"Hello {invoice.customer_name}, your bill {invoice.invoice_number} of ₹{invoice.amount:,.0f} from "
+            f"{merchant.display_name} is pending. Please pay by UPI using this Paytm link. Thank you!")
+
+
 def approval_payload(task: Task, invoice: Invoice) -> dict:
     return {
         "merchant_id": str(invoice.merchant_id),

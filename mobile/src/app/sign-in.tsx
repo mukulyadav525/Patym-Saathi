@@ -12,7 +12,7 @@ import { colors, radius } from "@/lib/theme";
 export default function SignIn() {
   const { signIn, session } = useAuth();
   const { next } = useLocalSearchParams<{ next?: string }>();
-  const [email, setEmail] = useState("owner@sharma.demo");
+  const [email, setEmail] = useState("mukul24360@iiitd.ac.in");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

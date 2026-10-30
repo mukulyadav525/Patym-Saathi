@@ -50,7 +50,7 @@ npm run test:api    # 69 backend tests
 npm run types       # regenerate shared/api-types.ts (API must be running)
 ```
 
-Demo login: `owner@sharma.demo`, password = `DEMO_PASSWORD` in `backend/.env` (seed default in `.env.example`).
+Demo login: `mukul24360@iiitd.ac.in`, password = `DEMO_PASSWORD` in `backend/.env` (seed default in `.env.example`).
 A second merchant `owner@storeb.demo` exists only for isolation tests.
 
 ### Supabase

@@ -55,9 +55,12 @@ def parse_bill_text(text: str, products: list[Product]) -> dict:
         line = raw.strip()
         if not line:
             continue
-        if not supplier and SUPPLIER_HINT.search(line) and not NUMBER.search(line):
-            supplier = line[:120]
-            continue
+        if not supplier and SUPPLIER_HINT.search(line) and _match(line, products) is None:
+            # Header like "METRO WHOLESALE TRADERS  Bill No 7781": keep the name before bill details.
+            name = re.split(r"(?i)\b(?:bill|invoice|inv|gstin|gst|date|ph|phone|mob)\b|\d", line)[0].strip(" -:|,")
+            if SUPPLIER_HINT.search(name):
+                supplier = name[:120]
+                continue
         if re.search(r"\b(grand\s*)?total\b", line, re.I):
             nums = [n for n in (_num(x) for x in NUMBER.findall(line)) if n is not None]
             bill_total = nums[-1] if nums else bill_total

@@ -68,6 +68,12 @@ def parse_amount(text: str) -> tuple[Decimal | None, bool]:
     return None, False
 
 
+# Words that carry meaning in requests and must never be read as a customer name.
+VOCAB = set(HINDI_NUMBERS) | set(MULTIPLIERS) | {w for w in RESTOCK_WORDS + COLLECT_WORDS + BRIEF_WORDS if " " not in w} | {
+    "saman", "samaan", "saaman", "mangwana", "mangana", "chahiye", "karo", "kar", "dukaan", "dukan", "hai", "ke", "liye",
+    "andar", "tak", "mein", "kuch", "mujhe", "mera", "meri", "aaj", "kal", "budget"}
+
+
 def match_customer(text: str, customers: list[str]) -> str | None:
     lowered = text.lower()
     for name in customers:
@@ -77,7 +83,11 @@ def match_customer(text: str, customers: list[str]) -> str | None:
     words = re.findall(r"[a-z]+", lowered)
     firsts = {name.lower().split()[0]: name for name in customers}
     for w in words:
-        close = difflib.get_close_matches(w, list(firsts), n=1, cutoff=0.85)
+        # Fuzzy only for likely misspellings of a name: never ordinary request words ("saman" ~ "Aman"),
+        # and the first letter must match.
+        if w in VOCAB or len(w) < 4:
+            continue
+        close = [c for c in difflib.get_close_matches(w, list(firsts), n=3, cutoff=0.85) if c[0] == w[0]]
         if close:
             return firsts[close[0]]
     return None

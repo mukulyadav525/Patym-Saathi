@@ -5,9 +5,11 @@ Endpoints and fields follow docs.sarvam.ai (checked 2026-10-30): speech-to-text 
 Model IDs are configurable (SARVAM_*_MODEL). Nothing returned here is trusted as an instruction.
 """
 
+import html
 import json
 import re
 import time
+import unicodedata
 
 import httpx
 
@@ -54,6 +56,24 @@ def transcribe(audio: bytes, filename: str, content_type: str, language: str = "
     if not transcript:
         raise ApiError(422, "EMPTY_TRANSCRIPT", "Didn't catch that; please try again or type")
     return transcript
+
+
+INDIC = re.compile(r"[\u0900-\u0D7F]")
+
+
+def romanize(text: str) -> str:
+    """Indic-script transcript -> Latin (Hinglish) so the rule parser and customer matching work on it.
+    Returns the input unchanged if it is already Latin or the call fails."""
+    if not enabled() or not INDIC.search(text):
+        return text
+    try:
+        resp = httpx.post(f"{BASE}/transliterate", headers=_headers(),
+                          json={"input": text[:1000], "source_language_code": "auto", "target_language_code": "en-IN",
+                                "numerals_format": "international"}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        return (resp.json().get("transliterated_text") or "").strip() or text
+    except (httpx.HTTPError, ValueError):
+        return text
 
 
 def extract_intent(text: str) -> dict:
@@ -103,7 +123,17 @@ def speak(text: str, language: str = "hi-IN") -> str:
     return audios[0]
 
 
-def translate(text: str, target: str, source: str = "auto") -> str:
+def _numbers(text: str) -> list[str]:
+    """Numbers in a text, Indic digits normalised to ASCII, grouping commas removed."""
+    ascii_text = "".join(str(unicodedata.digit(ch)) if ch.isdigit() else ch for ch in text)
+    return sorted(n.replace(",", "") for n in re.findall(r"\d[\d,]*\d|\d", ascii_text))
+
+
+def numbers_preserved(source: str, translated: str) -> bool:
+    return _numbers(source) == _numbers(translated)
+
+
+def translate(text: str, target: str, source: str = "en-IN") -> str:
     """Mayura translation of a merchant-owned draft (customer message). Output is display text only."""
     _require("TRANSLATION_UNAVAILABLE", "Translation needs SARVAM_API_KEY on the server")
     if target not in LANGUAGES:
@@ -113,7 +143,7 @@ def translate(text: str, target: str, source: str = "auto") -> str:
             f"{BASE}/translate",
             headers=_headers(),
             json={"input": text[:1000], "source_language_code": source, "target_language_code": target,
-                  "model": get_settings().sarvam_translate_model, "mode": "modern-colloquial"},
+                  "model": get_settings().sarvam_translate_model, "mode": "formal"},
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
@@ -122,14 +152,18 @@ def translate(text: str, target: str, source: str = "auto") -> str:
         raise ApiError(503, "TRANSLATION_UNAVAILABLE", "Translation is unavailable right now") from exc
     if not out:
         raise ApiError(503, "TRANSLATION_UNAVAILABLE", "Translation is unavailable right now")
+    # Money and dates must survive translation exactly; otherwise never show the translated text.
+    if not numbers_preserved(text, out):
+        raise ApiError(422, "TRANSLATION_UNSAFE", "The translation changed an amount or number, so it was not used. "
+                                                  "Use English or Hinglish for this message.")
     return out
 
 
 def parse_document(data: bytes, filename: str, content_type: str) -> str:
     """Document AI parse job for a bill photo: submit, poll, fetch text. Returns raw text (untrusted).
 
-    Submit and status paths are from the API reference; the results path is the documented
-    'results' endpoint. Verify against a live key before relying on it.
+    Submit / status / results paths verified against the live API (2026-10-31). Blocks come back as
+    HTML (tables for bills); they are flattened to one line per table row for the bill parser.
     """
     _require("DOCAI_UNAVAILABLE", "Bill reading needs SARVAM_API_KEY on the server; enter the bill lines instead")
     settings = get_settings()
@@ -172,4 +206,14 @@ def _text_from_result(payload: object) -> str:
                 walk(item)
 
     walk(payload)
-    return "\n".join(out)[:20000]
+    return "\n".join(_html_to_lines(t) for t in out)[:20000]
+
+
+def _html_to_lines(text: str) -> str:
+    """'<table><tr><td>Sugar</td><td>12</td></tr>...' -> 'Sugar  12' per row. Plain text passes through."""
+    if "<" not in text:
+        return text
+    text = re.sub(r"(?i)</tr>|<br\s*/?>|</p>|</h\d>|</li>|</div>", "\n", text)
+    text = re.sub(r"(?i)</t[dh]>", "  ", text)
+    text = html.unescape(re.sub(r"<[^>]+>", "", text))
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip())

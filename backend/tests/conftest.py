@@ -7,7 +7,8 @@ os.environ["DATABASE_URL"] = os.environ.get(
 os.environ["DEMO_MODE"] = "true"
 os.environ["DEMO_SHORTAGE"] = "true"
 os.environ["PAYTM_ENV"] = "demo"
-os.environ.pop("SARVAM_API_KEY", None)
+# Tests never call Sarvam (and never spend credits), even when backend/.env has a key.
+os.environ["SARVAM_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from alembic import command  # noqa: E402
@@ -43,7 +44,7 @@ def client():
     return TestClient(app)
 
 
-def login(client: TestClient, email: str = "owner@sharma.demo") -> dict:
+def login(client: TestClient, email: str = "mukul24360@iiitd.ac.in") -> dict:
     resp = client.post("/api/v1/auth/login", json={"email": email, "password": get_settings().demo_password})
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}

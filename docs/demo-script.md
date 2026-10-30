@@ -7,7 +7,7 @@ Independent hackathon concept (TeamAIR01). Sample data. Suppliers SIMULATED, pay
 - [ ] Laptop and demo phone on the same hotspot. Laptop IP matches the APK (`mobile/eas.json` → `demo-local`).
 - [ ] `npm run api`, `npm run web` running; open `http://<laptop-ip>:8000/health` on the phone → `"status":"ok"`.
 - [ ] Reset: Saathi → Business → **Reset demo data** (or web → Connections → Reset).
-- [ ] Login on phone and web: `owner@sharma.demo`, password = `DEMO_PASSWORD`.
+- [ ] Login on phone and web: `mukul24360@iiitd.ac.in`, password = `DEMO_PASSWORD`.
 - [ ] No approval PIN set (Profile → Approval PIN shows "Off"), or tell the audience the PIN.
 - [ ] Backup: the same flow on the web dashboard; backup video last.
 

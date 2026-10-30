@@ -14,7 +14,7 @@ from app.db import get_db
 from app.errors import ApiError
 from app.models import GoodsReceipt, Invoice, Offer, Product, Task
 from app.security import Ctx, current_ctx
-from app.services import audit, bills, growth
+from app.services import audit, bills, dues_flow, growth
 
 growth_api = APIRouter(prefix="/api/v1")
 
@@ -84,11 +84,17 @@ def impact(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.
 @growth_api.get("/brief/speech", response_model=s.SpeechOut)
 def brief_speech(lang: str = Query("hi-IN", pattern=r"^[a-z]{2}-IN$"), audio: bool = False,
                  ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.SpeechOut:
-    text = growth.brief_speech(db, ctx.merchant, "en-IN" if lang == "en-IN" else "hi-IN")
+    text = growth.brief_speech(db, ctx.merchant, "hi-IN" if lang == "hi-IN" else "en-IN")
     language = lang
     if lang not in ("hi-IN", "en-IN"):
-        # Other languages: translate the Hindi brief with Mayura, then speak it.
-        text = sarvam.translate(text, lang, source="hi-IN")
+        # Other languages: translate the English brief with Mayura, then speak it. If the translation
+        # altered any number, fall back to the English brief rather than speak a wrong amount.
+        try:
+            text = sarvam.translate(text, lang, source="en-IN")
+        except ApiError as exc:
+            if exc.code != "TRANSLATION_UNSAFE":
+                raise
+            language = lang = "en-IN"
     if not audio or not sarvam.enabled():
         return s.SpeechOut(text=text, language=language, voice="LIVE" if sarvam.enabled() else "OFF")
     return s.SpeechOut(text=text, language=language, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
@@ -141,25 +147,28 @@ def offer_shared(offer_id: uuid.UUID, ctx: Ctx = Depends(current_ctx), db: Sessi
 @growth_api.post("/translate", response_model=s.TranslateOut)
 def translate(body: s.TranslateRequest, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.TranslateOut:
     """Only drafts Saathi wrote for this merchant can be translated (no open text proxy)."""
+    # Hinglish original for hi-IN; every other language is translated from a clear English source.
     if body.kind == "OFFER":
         offer = db.scalars(select(Offer).where(Offer.merchant_id == ctx.merchant_id, Offer.id == _uuid(body.ref))).first()
-        source_text = offer.message if offer else None
-        if offer and body.target == "en-IN":  # English has its own template; no translation needed
-            text = growth.offer_message(ctx.merchant, db.get(Product, offer.product_id), offer.offer_price,
-                                        offer.discount_pct, "en-IN")
-            return s.TranslateOut(text=text, language="en-IN", engine="TEMPLATE")
+        original = offer.message if offer else None
+        english = (growth.offer_message(ctx.merchant, db.get(Product, offer.product_id), offer.offer_price,
+                                        offer.discount_pct, "en-IN") if offer else None)
     elif body.kind == "INVOICE":
         inv = db.scalars(select(Invoice).where(Invoice.merchant_id == ctx.merchant_id, Invoice.id == _uuid(body.ref))).first()
-        source_text = inv.draft_message if inv else None
+        original = inv.draft_message if inv else None
+        english = dues_flow.draft_message_en(inv, ctx.merchant) if inv else None
     else:
         match = next((c for c in growth.khata_insights(db, ctx.merchant_id)["customers"]
                       if c["customer_name"] == body.ref), None)
-        source_text = match["reminder"] if match else None
-    if not source_text:
+        original = match["reminder"] if match else None
+        english = match["reminder_en"] if match else None
+    if not original or not english:
         raise ApiError(404, "NOT_FOUND", "Nothing to translate")
     if body.target == "hi-IN":
-        return s.TranslateOut(text=source_text, language="hi-IN", engine="ORIGINAL")
-    return s.TranslateOut(text=sarvam.translate(source_text, body.target), language=body.target, engine="SARVAM_MAYURA")
+        return s.TranslateOut(text=original, language="hi-IN", engine="ORIGINAL")
+    if body.target == "en-IN":
+        return s.TranslateOut(text=english, language="en-IN", engine="TEMPLATE")
+    return s.TranslateOut(text=sarvam.translate(english, body.target), language=body.target, engine="SARVAM_MAYURA")
 
 
 def _uuid(value: str) -> uuid.UUID:

@@ -246,6 +246,8 @@ def khata_insights(db: Session, merchant_id: uuid.UUID, today: date | None = Non
             "credit_90d": f"{money(total_credit_90)}", "label": label, "suggested_limit": f"{money(limit)}",
             "open_invoice_id": str(invoice.id) if invoice else None,
             "open_invoice_number": invoice.invoice_number if invoice else None,
+            "reminder_en": (f"Hello {name}, ₹{outstanding:,.0f} of credit is pending in your account at our shop. "
+                            "Please pay when convenient. Thank you!") if outstanding > 0 else None,
             "reminder": (f"Namaste {name} ji, aapka ₹{outstanding:,.0f} ka udhaar baaki hai. "
                          f"Suvidha anusaar jaldi chuka dijiye. Dhanyavaad!") if outstanding > 0 else None,
             "history": [{"date": e.entry_date.isoformat(), "kind": e.kind, "amount": f"{e.amount:.2f}", "note": e.note}

@@ -105,7 +105,9 @@ async def assistant_voice(audio: UploadFile = File(...), language: str = Query("
     if len(data) > 5 * 1024 * 1024:
         raise ApiError(413, "AUDIO_TOO_LARGE", "Recording too long; keep it under a minute")
     transcript = sarvam.transcribe(data, audio.filename or "audio.m4a", audio.content_type or "audio/mp4", language)
-    return assistant.handle(db, ctx, s.AssistantRequest(text=transcript[:500]), channel="VOICE", transcript=transcript)
+    # Saaras returns Devanagari for Hindi; the parser works on Latin/Hinglish. Show the original, parse the romanized.
+    parse_text = sarvam.romanize(transcript)
+    return assistant.handle(db, ctx, s.AssistantRequest(text=parse_text[:500]), channel="VOICE", transcript=transcript)
 
 
 @api.get("/tasks/{task_id}/readback", response_model=s.ReadbackOut)

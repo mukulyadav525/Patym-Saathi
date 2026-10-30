@@ -70,7 +70,7 @@ export function BizLogo() {
 
 function SignIn() {
   const { signIn } = useAuth();
-  const [email, setEmail] = useState("owner@sharma.demo");
+  const [email, setEmail] = useState("mukul24360@iiitd.ac.in");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

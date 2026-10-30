@@ -5,7 +5,7 @@ import type { ExpoConfig } from "expo/config";
 const demoLocal = process.env.APP_VARIANT === "demo-local";
 
 const config: ExpoConfig = {
-  name: demoLocal ? "Saathi (local demo)" : "Paytm Saathi",
+  name: "Paytm Business",
   slug: "paytm-saathi",
   version: "0.1.0",
   scheme: "paytmsaathi",

@@ -44,3 +44,11 @@ def test_growth_topics():
     assert parse("aas paas ki dukaan kya bech rahi hai", []).topic == "BENCHMARKS"
     assert parse("Aman Stores ka pending payment collect karo", ["Aman Stores"]).intent == "COLLECT_DUE"
     assert parse("Diwali ke liye ₹10,000 ke andar stock arrange karo", []).intent == "RESTOCK"
+
+
+def test_ordinary_words_never_match_a_customer():
+    from app.services.intent import parse
+    names = ["Aman Stores", "Verma Tea Stall", "Rao General"]
+    p = parse("mujhe dukaan ke liye kuch saman mangwana hai, teen hazaar tak", names)
+    assert p.intent == "RESTOCK" and p.customer is None and int(p.budget) == 3000
+    assert parse("Amann Stores ka payment collect karo", names).customer == "Aman Stores"  # real typo still matches
