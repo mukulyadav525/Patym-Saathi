@@ -9,7 +9,7 @@
     "demo-local": {
       "distribution": "internal",
       "android": { "buildType": "apk" },
-      "env": { "APP_VARIANT": "demo-local", "EXPO_PUBLIC_API_BASE_URL": "http://192.168.43.100:8000" }
+      "env": { "APP_VARIANT": "demo-local", "EXPO_PUBLIC_API_BASE_URL": "http://192.168.40.82:8000" }
     },
     "development": {
       "developmentClient": true,

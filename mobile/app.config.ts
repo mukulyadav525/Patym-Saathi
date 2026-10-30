@@ -33,6 +33,8 @@ const config: ExpoConfig = {
     ["expo-build-properties", { android: { usesCleartextTraffic: demoLocal } }],
   ],
   experiments: { typedRoutes: true },
+  owner: "mukulydvl23",
+  extra: { eas: { projectId: "18ec48a4-508c-4958-ac32-ef25af67d806" } },
 };
 
 export default config;
