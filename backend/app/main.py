@@ -15,6 +15,12 @@ from app.errors import ApiError
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 log = logging.getLogger("saathi")
 
+_settings = get_settings()
+if _settings.app_env != "development" and (
+    _settings.jwt_secret.startswith("dev-only") or _settings.demo_webhook_key.startswith("dev-")
+):
+    raise RuntimeError("Set JWT_SECRET and DEMO_WEBHOOK_KEY outside development")
+
 app = FastAPI(title="Paytm Saathi API", version=VERSION,
               description="Hackathon prototype. Supplier and payment adapters are SIMULATED/DEMO unless configured.")
 app.add_middleware(

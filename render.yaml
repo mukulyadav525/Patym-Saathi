@@ -1,0 +1,26 @@
+# Render blueprint for the API. Set secrets in the Render dashboard, never here.
+services:
+  - type: web
+    name: paytm-saathi-api
+    runtime: docker
+    rootDir: backend
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL        # Supabase connection string (postgresql+psycopg://…), sslmode=require
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DEMO_WEBHOOK_KEY
+        generateValue: true
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS        # e.g. https://paytm-saathi.vercel.app
+        sync: false
+      - key: DEMO_MODE
+        value: "true"
+      - key: PAYTM_ENV
+        value: demo
+      - key: SEED_ON_BOOT
+        value: "false"
+      - key: SARVAM_API_KEY
+        sync: false
