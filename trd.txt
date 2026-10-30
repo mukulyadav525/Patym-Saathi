@@ -1,0 +1,346 @@
+PAYTM SAATHI — TECHNICAL REQUIREMENTS DOCUMENT
+Version: Hackathon MVP v1.1 (aligned to deck TeamAIR01.pdf)
+Architecture: Expo React Native Android app + Next.js web dashboard +
+FastAPI + Supabase PostgreSQL + Sarvam AI adapters + Paytm adapter (DEMO
+default).
+
+1. ARCHITECTURE (deck slide 13)
+Channels: Android merchant app (text + in-app voice), web dashboard.
+Both call the same FastAPI API over HTTPS.
+AI Soundbox is a proposed channel; not built.
+
+Saathi core (FastAPI):
+- Speech I/O: Saaras (STT), Bulbul (TTS) via server-side Sarvam adapter.
+- Orchestrator: intent extraction (Sarvam LLM, rule-based fallback) and
+  calls to the typed tool registry (§8).
+- Policy engine: action tiers, budget caps, approval tokens.
+- Evidence builder: attaches source records to every plan/brief.
+- Task tracker: state machines (§5), retries.
+- Audit log: append-only record of plans, approvals, adapter calls.
+
+Tools/connectors (adapters): Paytm (DEMO | STAGING), Billing/POS (SAMPLE
+seed data), Inventory (SAMPLE seed data), Suppliers (SIMULATED).
+
+Data: Supabase PostgreSQL (region ap-south-1 Mumbai) is the system of
+record. No Redis and no separate event queue in the MVP: webhooks are
+written to payment_events and processed in the same request (or a
+FastAPI BackgroundTask) to advance the task. Approval tokens live in the
+approvals table. (Deck slide 15 lists Redis — see checklist §10.)
+
+Clients never talk to Supabase tables directly; all data goes through
+FastAPI. Supabase Auth issues the JWT; FastAPI verifies it.
+
+2. REPOSITORY STRUCTURE
+paytm-saathi/
+  mobile/         Expo React Native app (Expo Router)
+    app/             (tabs)/home, assistant, brief, inbox; tasks/[id];
+                     approval sheet; sign-in
+    lib/api.ts       typed API client
+    app.json, eas.json (preview profile builds an APK)
+  web/            Next.js App Router dashboard
+    app/             inventory, orders, invoices, inbox, activity,
+                     connections, demo
+    lib/api.ts       typed API client
+  shared/api-types.ts  generated from FastAPI OpenAPI
+                       (openapi-typescript); used by mobile and web
+  backend/
+    app/main.py
+    app/api/ core/ db/ models/ schemas/ services/ policies/
+    app/adapters/   paytm_demo.py paytm_staging.py supplier_sim.py
+                    sarvam.py
+    app/tools/      registry.py + the 8 tools
+    app/workflows/  restock.py dues.py brief.py
+    migrations/ tests/ seed/ pyproject.toml
+  docs/  demo-script.md
+  .env.example  README.md
+
+3. DATA MODEL
+UUID PKs, UTC timestamps, FKs, constraints, indexes. Money = NUMERIC(12,2)
+/ Python Decimal; never float.
+
+merchants: id, display_name, paytm_mid (nullable), status, created_at
+merchant_memberships: user_id, merchant_id, role (OWNER | DEMO_ADMIN),
+  status, created_at
+products: id, merchant_id, name, name_hi, pack_label (e.g. "10 kg bag"),
+  pack_size (1 = one pack SKU), sell_price, active
+inventory: id, merchant_id, product_id, on_hand_packs, reserved_packs,
+  usable_packs (derived), source (SAMPLE|POS|MANUAL), source_updated_at,
+  updated_at
+sales_weekly: id, merchant_id, product_id, week_start, packs_sold,
+  source (SAMPLE|POS), imported_at   -- POS/billing data, not payments
+suppliers: id, name, connector_mode (SIMULATED|REAL), status
+supplier_quotes: id, supplier_id, product_id, unit_price, currency,
+  available_packs, min_order_packs, eta, valid_until, fetched_at
+data_connections: id, merchant_id, source (PAYTM|POS|INVENTORY|SUPPLIER|
+  SARVAM), mode (DEMO|STAGING|LIVE|SAMPLE|SIMULATED|OFF), consent_granted_at,
+  last_sync_at, status   -- powers the Connection-status screen
+tasks: id, merchant_id, task_type (RESTOCK|COLLECT_DUE|BRIEF), state,
+  input_text, input_channel (TEXT|VOICE), parsed_intent JSONB, created_by,
+  correlation_id, created_at, updated_at
+plans: id, task_id, version, budget, total, committed_total, payload
+  JSONB, payload_hash, status (ACTIVE|SUPERSEDED|REJECTED), reason,
+  created_at
+orders: id, merchant_id, task_id, plan_id, supplier_id, status, currency,
+  total, idempotency_key UNIQUE, connector_mode, created_at, updated_at
+order_lines: id, order_id, product_id, packs, unit_price, line_total,
+  quote_id, line_status (PENDING|ACCEPTED|UNAVAILABLE|CANCELLED)
+approvals: id, merchant_id, task_id, plan_id or invoice_id, action_type
+  (SUPPLIER_ORDER|PAYMENT_LINK), payload_hash, payload_snapshot JSONB,
+  amount, currency, expires_at, status (PENDING|CONSUMED|REJECTED|
+  EXPIRED|SUPERSEDED), approved_by, approved_at, consumed_at
+invoices: id, merchant_id, customer_name, customer_phone_masked,
+  invoice_number, amount, currency, status, due_date, provider_order_id,
+  link_url, link_mode (DEMO|STAGING), created_at, updated_at
+payment_events: id, merchant_id, invoice_id, provider, provider_event_id
+  UNIQUE, provider_order_id, txn_id, amount, currency, provider_status,
+  signature_verified, status_api_verified, received_at, processed_at,
+  raw_payload_redacted JSONB
+audit_events: id, merchant_id, actor (user id | "saathi" | "system"),
+  task_id, event_type, entity_type, entity_id, details_redacted JSONB,
+  correlation_id, created_at   -- append-only (no UPDATE/DELETE grant)
+idempotency_records: id, merchant_id, operation, key, request_hash,
+  status, result_ref, created_at, expires_at;
+  UNIQUE(merchant_id, operation, key)
+
+4. DEMO SEED FIXTURE (single source of truth for the numbers)
+Merchant: "Sharma Kirana Store" (demo). Second merchant "Test Store B"
+for isolation tests only. Budget used in demo: ₹5,000.
+
+Item           Pack        Stock  Sales w1-w4   Avg  A ₹   B ₹   Sell ₹
+Atta           10 kg bag     2    6,5,7,6        6   380   395   420
+Rice           5 kg bag      2    5,4,6,5        5   310   325   345
+Sugar          1 kg          8    20,19,21,20   20    42    44    48
+Toor dal       1 kg          3    8,7,9,8        8   150   158   170
+Sunflower oil  1 L           4    9,8,10,9       9   136   176   185
+Tea            250 g         4    6,5,7,6        6   133   140   150
+
+Supplier A ("Gupta Distributors", SIMULATED): all items available at
+quote time; on order submission the oil line returns UNAVAILABLE
+(deterministic shortage when DEMO_SHORTAGE=true).
+Supplier B ("Metro Wholesale", SIMULATED): all items available, oil 10
+packs.
+
+Expected results (unit-tested):
+Plan v1: 4+3+12+5+5+2 = 31 packs, all Supplier A = ₹4,650.
+  1,520 + 930 + 504 + 750 + 680 + 266 = 4,650.
+Shortage: A accepts 5 lines = ₹3,970; oil x5 unavailable.
+Plan v2: A ₹3,970 + B oil 5 x ₹176 = ₹880 -> ₹4,850 (₹150 under budget).
+After simulated delivery: inventory +31 packs (Atta 6, Rice 5, Sugar 20,
+Toor 8, Oil 9, Tea 6).
+
+Invoices: INV-1042 Aman Stores ₹1,200, due today-5, PENDING (demo
+target); INV-1038 Verma Tea Stall ₹650, due today+2, PENDING; INV-1035
+Rao General ₹900, PAID. Phone numbers are fake/masked.
+
+Connections seed: PAYTM=DEMO, POS=SAMPLE, INVENTORY=SAMPLE,
+SUPPLIER=SIMULATED, SARVAM=LIVE if key present else OFF.
+
+5. STATE MACHINES
+Task:
+NEW -> UNDERSTANDING -> EVIDENCE_READY -> PLAN_DRAFTED ->
+AWAITING_APPROVAL -> APPROVED -> EXECUTING -> VERIFYING -> COMPLETED
+Exception: EXECUTING -> EXCEPTION -> PLAN_DRAFTED (new plan version) ->
+AWAITING_APPROVAL ...
+Terminal: COMPLETED, PARTIALLY_COMPLETED (approval 2 rejected),
+CANCELLED (approval 1 rejected/expired), FAILED.
+BRIEF: NEW -> UNDERSTANDING -> EVIDENCE_READY -> COMPLETED (no approval).
+Restock VERIFYING = waiting for goods receipt; COLLECT_DUE VERIFYING =
+waiting for verified payment.
+
+Order: DRAFT -> AWAITING_APPROVAL -> APPROVED -> SUBMITTED ->
+ACCEPTED | PARTIALLY_ACCEPTED -> GOODS_RECEIVED; or CANCELLED / FAILED.
+SIMULATED is shown via connector_mode, not as a state. Never
+GOODS_RECEIVED on creation.
+
+Invoice (deck slide 10):
+PENDING -> DRAFTED -> APPROVED -> SENT -> VERIFIED -> PAID
+Side states: FAILED, EXPIRED, CANCELLED, REFUNDED,
+RECONCILIATION_REQUIRED. Only the verification path (§9) moves an
+invoice to VERIFIED/PAID.
+
+Every transition: validated against an allowed-transitions table, done
+in a DB transaction, and writes an audit_event.
+
+6. RESTOCK CALCULATION (deterministic, backend only)
+horizon_days = 7 (next restock cycle covering the weekend)
+forecast = ceil(avg weekly packs_sold over last 4 weeks * horizon/7)
+safety_stock = 0 in demo (config RESTOCK_SAFETY_PACKS)
+net_need = max(0, forecast + safety - usable_packs - inbound_packs)
+order_packs = round_up(net_need, max(pack_size, min_order_packs))
+Supplier choice per line: cheapest valid quote (not expired, enough
+available_packs); tie -> fewer suppliers.
+Budget: if committed_total + new total > budget, return BUDGET_EXCEEDED
+with options (drop lowest-priority line / reduce qty); never exceed.
+Re-plan: keep accepted lines as committed; re-source unavailable lines
+(partial at same supplier first, then alternative supplier); new plan
+version with diff vs previous.
+The LLM never computes or edits quantities or totals.
+
+7. APPROVAL SECURITY
+- Authenticated user with OWNER membership for the merchant.
+- Approval sheet shows supplier(s), each line (item, packs, unit ₹,
+  line ₹), total, budget, remaining budget, and the diff vs the previous
+  approval.
+- payload_hash = SHA-256 of canonical JSON {merchant_id, task_id,
+  plan_id, plan_version, action_type, suppliers, lines, currency, total,
+  budget}.
+- POST /approvals/{id}/confirm: recompute hash from current DB state,
+  check not expired (10 min), status PENDING, quotes still valid, then in
+  one transaction mark CONSUMED and execute. Single-use.
+- New plan version -> previous PENDING approvals SUPERSEDED.
+- Voice is never an authorization factor. Optional 4-digit PIN.
+- Duplicate confirm with the same Idempotency-Key returns the first
+  result.
+
+8. AGENT TOOLS (deck slide 14) — the only way the agent touches data
+Tool                  Does                       Side effect  Who may call
+get_sales_summary     4-wk sales by item         none         LLM
+get_inventory         usable stock               none         LLM
+get_supplier_quotes   prices + availability      none         LLM
+plan_restock          draft plan within budget   draft        LLM
+create_supplier_order place approved order       spends       backend, with
+                                                              approval token
+create_payment_link   Paytm link for invoice     sends        backend, with
+                                                              approval token
+check_txn_status      verify payment status      none         system only
+update_invoice        mark invoice paid          writes       system only,
+                                                              after verify
+Rules:
+- Each tool has Pydantic input/output schemas; inputs from the LLM are
+  untrusted candidates and validated.
+- The LLM may request a write tool; this only creates an approval
+  challenge. Execution happens in /approvals/{id}/confirm with the token.
+- check_txn_status/update_invoice run only inside the webhook/verify
+  path, never from the LLM.
+- OCR text, supplier catalogue text and customer messages are untrusted;
+  embedded instructions are ignored. No secrets in model context.
+
+LLM responsibilities: intent (RESTOCK | COLLECT_DUE | BRIEF | UNKNOWN),
+extract candidate budget/items/customer, ask clarifying questions,
+explain backend-generated plans/briefs in Hindi/English.
+Fallback parser (no Sarvam): keywords (stock/saman -> RESTOCK;
+payment/udhaar/dues/collect -> COLLECT_DUE; aaj/important/brief -> BRIEF)
++ amount parser (₹5,000, 5000, 5k, "paanch hazaar"); fuzzy match customer
+names against invoices.
+
+9. PAYTM ADAPTER (deck slide 10)
+Interface: create_link(invoice) -> {provider_order_id, link_url};
+fetch_status(provider_order_id) -> {mid, order_id, amount, status, txn_id};
+verify_webhook(headers, body) -> bool.
+DEMO adapter (default, PAYTM_ENV=demo): returns a DEMO link; "Simulate
+customer UPI payment" creates a webhook body signed with a demo key and
+posts it to the same /webhooks/paytm handler.
+STAGING adapter (PAYTM_ENV=staging): Paytm Payment Links (Create Link)
+and Transaction Status API on the Paytm staging host, request bodies
+signed with the paytmchecksum library using PAYTM_MID +
+PAYTM_MERCHANT_KEY; confirm exact endpoint paths and field names in the
+Paytm developer docs at build time. Built and unit-tested with recorded
+mock responses; only called "staging-ready" after a real staging call.
+Verification path (both modes):
+1. Verify webhook signature/checksum; reject if invalid (audit it).
+2. Dedupe by provider_event_id (idempotent).
+3. Call fetch_status (server-to-server) — never trust the webhook alone.
+4. 4-field check: mid == merchant MID, order_id == invoice
+   provider_order_id, amount == invoice amount (Decimal, same currency),
+   status == success.
+5. All pass -> VERIFIED -> PAID via update_invoice; any mismatch ->
+   RECONCILIATION_REQUIRED; failure status -> FAILED.
+
+Supplier adapter (SIMULATED): deterministic quotes and shortage;
+submit(order) returns per-line ACCEPTED/UNAVAILABLE; simulate_delivery
+-> goods-received. Order placement does not imply payment or delivery.
+
+Sarvam adapter (server-side only, timeouts 10 s, text fallback):
+STT Saaras (Hindi/Hinglish/English), TTS Bulbul (plan read-back), LLM
+chat for intent/explanations, Mayura translation for customer message.
+Confirm exact model IDs and audio formats in Sarvam docs at build time.
+Voice never blocks the core flows.
+
+10. API CONTRACT (all under /api/v1 except /health; JWT required)
+GET  /health
+GET  /dashboard                    home cards
+GET  /brief                        ≤3 cited priorities
+POST /assistant/message            {text} -> task + parsed intent
+POST /assistant/voice              audio -> transcript -> same as above
+POST /assistant/speak              {text} -> TTS audio
+GET  /tasks | /tasks/{id}          inbox; state, plan, evidence, approvals
+POST /tasks/{id}/plan              draft plan (no external action)
+POST /tasks/{id}/approvals         approval challenge for current plan
+POST /approvals/{id}/confirm       Idempotency-Key header; consume + execute
+POST /approvals/{id}/reject
+POST /tasks/{id}/replan            after shortage/quote change
+GET  /orders | /inventory | /invoices
+POST /invoices/{id}/payment-link   draft link + approval challenge
+POST /webhooks/paytm               no JWT; signature verified
+GET  /connections                  connection-status screen
+GET  /audit?task_id=&cursor=       activity history
+POST /demo/reset                   demo mode + DEMO_ADMIN only
+POST /demo/simulate-delivery/{order_id}
+POST /demo/simulate-payment/{invoice_id}
+Errors: {code, message, details}; codes include BUDGET_EXCEEDED,
+APPROVAL_EXPIRED, APPROVAL_SUPERSEDED, HASH_MISMATCH, INVALID_TRANSITION,
+FORBIDDEN, PROVIDER_UNAVAILABLE.
+
+11. SECURITY AND PRIVACY
+- HTTPS for deployed traffic. Android blocks plain HTTP in release
+  builds; for the local-fallback APK pointing at a laptop IP, use a
+  separate demo build profile that allows cleartext (expo-build-
+  properties) — never in a real release.
+- Android app requests RECORD_AUDIO only when the mic is tapped; denied
+  -> text input.
+- Mobile stores the Supabase session in expo-secure-store, not
+  AsyncStorage.
+- SARVAM_API_KEY, DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
+  PAYTM_MERCHANT_KEY only on the server; nothing secret in NEXT_PUBLIC_*.
+- Verify Supabase JWT and merchant membership on every protected call;
+  every query filtered by merchant_id; RLS enabled as defence in depth.
+- CORS restricted to CORS_ORIGINS. Rate-limit assistant, approval and
+  webhook endpoints where feasible.
+- Redact logs and provider payloads; mask phone numbers.
+- Consent: data_connections.consent_granted_at set when a source is
+  connected; shown on Connection-status screen.
+- Reminders, lending: out of MVP.
+
+12. TEST STRATEGY
+Unit: forecast + pack rounding; supplier choice; budget cap; Decimal
+totals (4,650 / 3,970 / 4,850); approval hash, expiry, supersede; state
+transition tables; webhook signature; 4-field check incl. mismatches;
+fallback parser ("₹5,000", "5k", "paanch hazaar" vs "pachaas").
+Integration: migrations + seed; transactional approval consumption;
+duplicate confirm -> one order; duplicate webhook -> one transition;
+cross-merchant access denied; adapter timeout -> FAILED with retry
+option.
+End-to-end: restock (plan -> approve -> shortage -> replan -> approve 2
+-> simulated delivery -> inventory +31); dues (INV-1042 -> link ->
+approve -> simulate payment -> PAID); brief; reset restores fixture;
+Android app and web dashboard show the same state (approve on phone,
+see it on web).
+
+13. DEPLOYMENT AND OPERATIONS
+- .env.example with names only; documented local start commands.
+- Migrations (Alembic) + `seed` and `reset` commands.
+- Deploy by hour 12, not at the end; /health and logs available.
+- Web dashboard on Vercel; API on Render or Railway (check cold starts;
+  warm it before demo); DB/Auth on Supabase.
+- Android: EAS Build APK (preview profile); build the first APK by hour
+  16 (EAS free-tier queues can be slow); keep a local build path
+  (`npx expo run:android`) as backup.
+- Test APK install on the actual demo Android phone; confirm
+  EXPO_PUBLIC_API_BASE_URL points to the deployed API, plus a local
+  fallback build pointing at the laptop.
+- Local demo is primary fallback; recorded video is last resort.
+- Tag a known-good commit before final changes.
+
+14. IMPLEMENTATION PRIORITIES
+P0: repo, migrations, seed fixture, deterministic restock + tests,
+approvals, shortage/replan, DEMO dues flow with verification path,
+daily brief (deterministic), Android app four screens, web dashboard
+views, audit
+log, connection-status screen, reset, text assistant with fallback
+parser, Saaras voice input.
+P1: Sarvam LLM intent + explanations, Bulbul read-back, Mayura message,
+Paytm staging adapter + tests, auth hardening + isolation tests, cloud
+deploy, monitoring.
+P2: live Paytm, real suppliers, POS connectors, bill OCR (Sarvam Vision),
+Soundbox, WhatsApp/SMS, Redis/queue, lending, more languages.
+No P1/P2 work may jeopardize P0.

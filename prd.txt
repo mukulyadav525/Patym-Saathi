@@ -1,0 +1,274 @@
+PAYTM SAATHI — PRODUCT REQUIREMENTS DOCUMENT
+Version: Hackathon MVP v1.1 (aligned to deck TeamAIR01.pdf)
+Team: TeamAIR01, IIIT Delhi (Prerak Tanwar, Garv Jain, Mukul Yadav)
+Product type: Android merchant app (Expo React Native, installable APK)
++ Next.js web dashboard, one FastAPI backend, one PostgreSQL DB.
+Time constraint: 56 hours total; first 50 hours primary build, final 6
+hours to integrate, test, polish and rehearse.
+
+Source of truth order: this PRD -> trd.txt -> stack.txt -> checklist.txt.
+Where the deck and these files differ, these files win for the build and
+checklist.txt §10 lists what to say/fix in the pitch.
+
+1. PRODUCT SUMMARY
+Paytm Saathi is a proposed AI business partner for small Paytm merchants.
+It turns a merchant's spoken or typed goal into an evidence-backed plan,
+asks for explicit on-screen approval before any action that spends money
+or sends a message, executes through authorized systems or clearly
+labeled demo adapters, and tracks the result to done.
+
+Agent loop (deck slide 6): Hear -> Understand -> Evidence -> Plan ->
+Approve -> Execute -> Verify. On an exception (shortage, failed payment)
+it re-plans from Plan and asks again.
+
+The MVP demonstrates two end-to-end workflows plus one read-only feature:
+A. Restock planning: ₹4,650 plan -> approval 1 -> supplier shortage ->
+   ₹4,850 re-plan -> approval 2 -> order -> (simulated) delivery.
+B. Dues collection: INV-1042 Aman Stores ₹1,200 -> payment link ->
+   approval -> customer pays (simulated) -> signature + 4-field
+   verification -> invoice PAID.
+C. Daily brief: 3 cited priorities, no approval needed.
+
+2. PROBLEM AND PRODUCT PRINCIPLES
+Problem hypothesis: kirana owners run ordering, credit and accounts from
+memory across several tools (shelf checks, phone calls, WhatsApp, cash
+notebook). Survey data in the deck motivates this; the prototype alone
+does not prove market-wide outcomes.
+
+Principles:
+- Evidence before advice: every plan cites its records, cost, impact and
+  missing data.
+- Business numbers (quantities, totals, budget checks) are computed in
+  code, never by the LLM.
+- Explicit on-screen approval before any money-moving or messaging
+  action, every time. A spoken "haan" is never an approval.
+- Any material change after approval requires a new approval.
+- Verify outcomes before declaring success.
+- Make simulated/demo actions unmistakable (DEMO / SIMULATED badges).
+- Never infer item-level sales, stock, margins or demand from payment
+  data alone; say what is missing.
+- Ask for missing or ambiguous data instead of inventing it.
+
+3. USERS
+Primary: kirana owner on a low-end Android phone; prefers Hindi/Hinglish
+and voice; needs large touch targets, clear ₹ amounts, text fallback.
+Secondary: same merchant/operator on a desktop browser reviewing
+inventory, orders, invoices, tasks and audit history.
+Evaluator: needs a short, repeatable demo with visible evidence,
+approvals, state changes and honest integration labels.
+
+4. GOALS
+Must achieve (P0):
+- Installable Android app (Expo, EAS-built APK) with the four deck
+  screens: Merchant home, Voice assistant, Daily report, Task inbox.
+- Next.js web dashboard views: Inventory, Orders, Invoices, Task inbox,
+  Activity/audit history, Connection status.
+- Shared FastAPI backend and Supabase PostgreSQL database.
+- Text input to the assistant; voice input via Sarvam Saaras (the deck
+  lists "Ask Saathi + voice input" as working), with text fallback.
+- Deterministic stock-plan scenario: ₹4,650 initial, ₹4,850 revised,
+  under ₹5,000 budget, two approvals.
+- Dues collection with DEMO payment adapter that goes through the same
+  signature + 4-field verification path as the real adapter.
+- Daily brief with 3 priorities citing records.
+- Task/order/invoice state and audit history visible in the UI.
+- Connection-status screen showing each data source's mode (DEMO,
+  STAGING, SAMPLE, SIMULATED) and consent status.
+- Repeatable seed/reset flow and a backup demo video.
+
+Should achieve (P1):
+- Paytm staging adapter code: checksum-signed Create Link + Transaction
+  Status + webhook verification, covered by tests with mocked responses.
+  Run against Paytm staging only if credentials arrive.
+- Plan read-aloud via Sarvam Bulbul (TTS).
+- Customer message translated via Sarvam Mayura.
+- Sarvam LLM for intent extraction and plan explanations (rule-based
+  parser is the fallback).
+- Supabase Auth hardening and cross-merchant isolation tests.
+- Hosted web + API.
+
+Not a goal for this hackathon:
+- Production certification or a production financial service.
+- Live money movement.
+- Soundbox integration (no public developer API; shown as proposed).
+- Bill photo OCR via Sarvam Vision (deck "Level 2"; roadmap only).
+- Real supplier fulfilment, real supplier payment, POS integrations.
+- Automated WhatsApp/SMS sending, lending, Redis/event queue.
+- Languages beyond Hindi, Hinglish and English in the demo.
+
+5. CORE USER JOURNEYS
+
+5.1 Restock (deck slides 8-9)
+1. Merchant taps mic (or types): "Weekend ke liye ₹5,000 ke andar stock
+   arrange karo."
+2. Speech -> text (Saaras). Intent = RESTOCK, budget = ₹5,000, horizon =
+   7 days. Saathi reads back the parsed budget for confirmation if speech
+   confidence is low or the amount is ambiguous.
+3. Backend loads usable stock, 4-week sales history, pack sizes and
+   quotes from Supplier A and Supplier B, with timestamps.
+4. Backend computes the plan (rule in trd.txt §6): 6 items, 31 packs,
+   all from Supplier A (cheapest available), total ₹4,650.
+5. UI shows each line (item, sold/wk, stock, order qty, unit ₹, total ₹),
+   evidence sources, quote time, assumptions and missing data.
+6. Approval 1: merchant taps Approve ₹4,650 (optional 4-digit PIN).
+7. Order to Supplier A is submitted (SIMULATED).
+8. Supplier A responds: sunflower oil x5 out of stock; other 5 lines
+   accepted (₹3,970). Order A = PARTIALLY_ACCEPTED. Task -> EXCEPTION.
+9. Re-plan: Supplier B has oil at ₹176 x5 = ₹880 (+₹200 vs plan). New
+   plan total ₹4,850 = ₹3,970 (already with A) + ₹880 (new, B). Still
+   ≤ ₹5,000.
+10. Plan v1 approval is superseded. Approval 2 shows the revised plan
+    total ₹4,850 and highlights the change (oil: A ₹136 -> B ₹176,
+    +₹200). Merchant taps Approve ₹4,850.
+11. Order to Supplier B is submitted (SIMULATED).
+12. If the merchant rejects approval 2: oil line is dropped, task
+    completes as partial at ₹3,970, audit records the rejection.
+13. Demo-only "Simulate delivery" records goods-received for both
+    orders. Only then inventory increases by +31 packs.
+14. Activity history shows both approvals, the shortage, re-plan reason,
+    amounts and final state: "Final spend ₹4,850, ₹150 under limit".
+
+Acceptance criteria:
+- ₹4,650 and ₹4,850 come from seeded data via backend code; unit tests
+  assert both.
+- Committed spend can never exceed the ₹5,000 budget (backend check).
+- Demand rule is explicit (7-day horizon from 4-week average); weekly
+  sales are not silently called "weekend demand".
+- Units shown as packs (e.g., "31 packs"), never mixed generic "units".
+- Approval binds merchant, task, plan version, payload hash, supplier(s),
+  lines, prices, currency, total, budget, expiry (10 min).
+- Any changed line/supplier/price/total needs a new approval.
+- Duplicate approve/submit taps never create duplicate orders.
+- Order creation alone never changes inventory.
+
+5.2 Dues collection (deck slide 10)
+1. Merchant says/types "Aman Stores ka pending payment collect karo" or
+   opens Invoices.
+2. Saathi finds INV-1042, Aman Stores, ₹1,200, overdue, status PENDING.
+3. Saathi drafts a payment link and a short message (Hindi; Mayura
+   translation optional). Invoice -> DRAFTED.
+4. Merchant approves link + message on-screen. Invoice -> APPROVED.
+5. Backend calls Create Link (DEMO adapter by default; Paytm staging if
+   configured). Invoice -> SENT. Merchant shares the link via the phone's
+   share sheet (Saathi does not send WhatsApp/SMS itself).
+6. Demo-only "Simulate customer UPI payment" makes the DEMO adapter emit
+   a signed webhook.
+7. Backend verifies the webhook signature, then calls Transaction Status
+   and checks 4 fields: merchant ID, order ID, amount (₹1,200.00) and
+   status = success. Invoice -> VERIFIED -> PAID.
+8. Any mismatch -> RECONCILIATION_REQUIRED; never PAID.
+9. Activity history shows request, approval, link, event, status check
+   and result.
+
+Acceptance criteria:
+- DEMO links/payments are visibly labeled DEMO.
+- No screenshot, chat text, client callback or LLM output can mark an
+  invoice paid; only the verification path can.
+- Webhook replay/duplicates are idempotent.
+- Real Paytm calls are not claimed unless staging tests passed.
+
+5.3 Daily brief (deck slides 6, 12)
+"Aaj mere business mein kya important hai?" -> up to 3 priorities from
+records, each citing its source, e.g.:
+1. INV-1042 Aman Stores ₹1,200 overdue -> [Collect] quick action.
+2. Low stock: Sugar 8 packs vs ~20/week -> [Plan restock].
+3. Yesterday's sales and gross margin (from seeded sell/buy prices).
+Read-only, no approval. Missing data is stated, never invented.
+
+6. SCREENS
+Android app (Expo):
+- Merchant home: AI insight cards + quick actions (Restock, Collect dues,
+  Daily brief), connection/DEMO banner.
+- Voice assistant: tap-to-speak, Hindi/English toggle, transcript, text
+  box, read-back of parsed values.
+- Daily report: 3 priorities with citations.
+- Task inbox: tasks by state; approval cards (Approve / Reject); track
+  and follow up.
+- Plan detail / approval sheet: line items, evidence, change diff.
+Web dashboard (Next.js): Inventory, Orders, Invoices, Task inbox (can
+also approve), Activity history, Connection status, Demo controls (reset,
+simulate delivery, simulate payment — demo mode only).
+
+7. FUNCTIONAL REQUIREMENTS
+FR-01 Merchant opens the Android app and the web dashboard.
+FR-02 Both use the same backend API and persistent database.
+FR-03 Assistant accepts text (required) and voice (Saaras) input.
+FR-04 Backend validates intent parameters and computes all totals.
+FR-05 UI shows evidence records, assumptions and data freshness.
+FR-06 Plans are drafts; drafting never executes external actions.
+FR-07 Money/messaging actions need authenticated on-screen approval.
+FR-08 Approval is one-time, expires, and binds to the exact payload hash.
+FR-09 Material changes supersede prior approvals.
+FR-10 Backend enforces the budget cap on committed spend.
+FR-11 Restock supports shortage, re-plan and second approval.
+FR-12 Order status: DRAFT, AWAITING_APPROVAL, APPROVED, SUBMITTED,
+      ACCEPTED, PARTIALLY_ACCEPTED, GOODS_RECEIVED, CANCELLED, FAILED;
+      connector_mode badge shows SIMULATED.
+FR-13 Inventory changes only on goods receipt/adjustment.
+FR-14 Invoice states follow trd.txt §5 and come from verified records.
+FR-15 DEMO payment path is isolated from staging/live config.
+FR-16 Audit log records plan, approval, state change, adapter request /
+      result, failures, with timestamps.
+FR-17 Seed/reset reproduces the same demo scenario.
+FR-18 Merchant data isolated; every endpoint authorized.
+FR-19 UI shows loading, error, empty, retry, offline states.
+FR-20 Demo reset/simulate controls only in demo mode for demo admin.
+FR-21 Daily brief returns ≤3 cited priorities, read-only.
+FR-22 Connection-status screen lists each source, mode, consent time and
+      last sync.
+FR-23 Eight typed tools (trd.txt §8) are the only way the agent touches
+      data; write tools need an approval token.
+
+8. NON-FUNCTIONAL REQUIREMENTS
+Security: server-side secrets only; merchant authorization on every
+protected call; RLS on any client-accessed tables; validated input and
+output schemas; no LLM-driven privileged mutation; redacted logs.
+Reliability: idempotent order submission and payment events; DB
+transactions for approval consumption and state changes; timeouts and
+safe retries; /health; deterministic seed; local demo fallback.
+Usability: Android-first; ≥48px touch targets; ₹ amounts in large text;
+Hindi/English labels; text fallback when voice/network fails; works on
+slow 3G (offline banner, last loaded data still visible).
+Privacy (DPDP Act 2023 aligned in design): consent recorded per
+connected source; minimal data; fake customer contacts in seed;
+retention/deletion/incident/backups defined before any real pilot;
+lending out of scope.
+
+9. SUCCESS CRITERIA FOR THE HACKATHON
+- Fresh clone starts with documented steps.
+- APK installs on an Android phone and completes the restock scenario.
+- Dashboard shows the same persisted task/order/invoice states.
+- Totals are exactly ₹4,650 and ₹4,850; second approval is mandatory.
+- Dues flow reaches PAID only through the verification path, labeled
+  DEMO.
+- Voice request in Hindi/Hinglish works, with text fallback.
+- Activity history viewable; one-click reset restores the demo.
+- Time-to-plan is visible from audit timestamps (deck "under 2 min"
+  metric).
+- Backup video exists.
+These show a working prototype; they do not prove business impact.
+
+10. OUT OF SCOPE / DEPENDENCIES
+- Paytm merchant-level access and real payment-link creation need an
+  authorized Paytm partnership and staging/production credentials.
+- Supplier quotes/orders are simulated; real ones need distributor APIs.
+- Supplier payment mechanism (COD / UPI on delivery / distributor
+  credit) is an open product decision; no supplier payment in MVP. Demo
+  answer: "COD/UPI on delivery, as today; Saathi only places the order."
+- Soundbox voice entry is a proposed future channel.
+- WhatsApp/SMS sending needs consent, templates and registration.
+- Lending needs separate partner and regulatory review.
+- Market, model and competitor figures must stay sourced (deck appendix).
+
+11. DECISIONS (resolved for the build)
+- Clients: Expo React Native Android app (primary) + Next.js web
+  dashboard. Deck slide 15 says "installable PWA"; see checklist §10.
+- Forecast horizon: 7 days (next restock cycle covering the weekend);
+  demand = 4-week average weekly sales; safety stock = 0 in the demo
+  fixture (configurable).
+- Auth: Supabase Auth email + password; seeded demo merchant and a second
+  merchant for isolation tests.
+- Approval: on-screen tap + optional 4-digit PIN; voice never approves.
+- Message delivery: Paytm link shared via the phone's share sheet.
+Still open (decide by hour 4): API host (Render or Railway); whether
+Sarvam and Paytm staging credentials are available.

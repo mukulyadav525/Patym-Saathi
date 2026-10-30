@@ -1,0 +1,156 @@
+PAYTM SAATHI — TECHNOLOGY STACK
+Version: Hackathon MVP v1.1
+Decision: Android-first Expo app plus a Next.js web dashboard, sharing
+one FastAPI backend and one PostgreSQL database. (Deck slide 15 says
+"Next.js PWA"; we chose Expo for a native Android feel — see checklist
+§10 for how to present it.)
+
+1. CLIENTS
+Android app (merchant, primary demo):
+- Expo (current stable SDK) + React Native + TypeScript
+- Expo Router for navigation (tabs: Home, Assistant, Brief, Inbox)
+- expo-audio for mic recording (expo-av if the SDK still needs it);
+  upload audio to backend; text input always available
+- expo-secure-store for the Supabase session; @supabase/supabase-js
+  only for Auth, no direct table access
+- @react-native-community/netinfo for offline banner
+- Typed fetch client using shared/api-types.ts; Zod for form validation
+- Expo EAS Build to produce an installable APK (preview profile)
+Reason: fast development and a native-feeling Android experience.
+
+Web dashboard (operator view):
+- Next.js App Router + TypeScript
+- Tailwind CSS + shadcn/ui (small consistent component set)
+- Supabase JS only for Auth
+- Recharts only if a chart clearly helps
+Reason: quick tables for inventory, orders, invoices, inbox, audit.
+
+Shared: generate TS types from FastAPI's OpenAPI with openapi-typescript
+into shared/api-types.ts so both clients match the backend.
+
+2. BACKEND (deck: "Python, FastAPI — async tool layer, policy engine,
+   Sarvam SDK")
+- Python 3.11+
+- FastAPI + Uvicorn
+- Pydantic v2 for request/response and tool schemas
+- SQLAlchemy 2 + psycopg 3; Alembic migrations
+- httpx (outbound calls with timeouts)
+- sarvamai (Sarvam Python SDK) or plain httpx to Sarvam REST
+- paytmchecksum (Paytm's official checksum library) for the staging
+  adapter
+- python-jose or PyJWT to verify Supabase JWTs
+- Pytest + HTTPX test client
+Reason: clear business logic; strong separation between LLM suggestions
+and privileged execution.
+
+3. DATABASE AND PLATFORM (deck: "PostgreSQL + Redis")
+- Supabase PostgreSQL (region ap-south-1 Mumbai) = system of record
+- Supabase Auth (email + password; seeded demo users)
+- RLS enabled on all tables as defence in depth; clients still go through
+  FastAPI only
+- NUMERIC(12,2) for money
+- Redis: NOT in the MVP. Approval tokens are rows in `approvals`;
+  webhook events are rows in `payment_events` processed in-request /
+  BackgroundTasks. Add Redis only if a real queue becomes necessary.
+- Supabase Storage: not used (bill photo OCR is roadmap)
+
+4. AI / VOICE (Sarvam AI, server-side only)
+- Voice in: Saaras (STT; Hindi, Hinglish, English tested in demo)
+- Reasoning: Sarvam chat LLM (deck: Sarvam-105B / 30B) for intent
+  extraction and explanations; tool calling only for read tools
+- Voice out: Bulbul (TTS) for plan read-back
+- Translation: Mayura for the customer payment message
+- Confirm exact model IDs, language lists and audio formats in Sarvam
+  docs at build time; update the deck claim if they differ
+- Fallback: rule-based intent/amount parser + quick-action buttons
+- Deterministic code for quantities, totals, budget, approvals, invoice
+  status — never the LLM
+
+5. EXTERNAL SYSTEMS
+Supplier: SIMULATED adapter (Supplier A, Supplier B), deterministic
+quotes, deterministic oil shortage, simulate-delivery.
+Payments: DEMO Paytm adapter by default (signed demo webhook goes through
+the real verification path). STAGING adapter: Payment Links + Transaction
+Status API + S2S webhook, checksum-signed; used only with credentials.
+No live money movement.
+
+6. HOSTING / DEPLOYMENT
+- Web dashboard: Vercel
+- API: Render or Railway (decide by hour 4); ping /health before demo
+  to avoid cold start
+- DB/Auth: Supabase
+- Android APK: Expo EAS Build (first APK by hour 16; free-tier queues
+  can be slow); backup: local `npx expo run:android`
+- Local: `uvicorn` + `npm run dev` (web) + Expo app pointing at the
+  laptop IP over a phone hotspot, as primary demo fallback (demo build
+  profile allows cleartext HTTP to the laptop only)
+- Do not depend only on venue Wi-Fi: phone hotspot + local fallback +
+  recorded video
+
+7. REPOSITORY
+paytm-saathi/ mobile/ web/ shared/ backend/ docs/ .env.example README.md
+(details in trd.txt §2)
+
+8. ENVIRONMENT VARIABLES
+Backend:
+DATABASE_URL=
+SUPABASE_URL=
+SUPABASE_JWT_SECRET=          # or JWKS URL, to verify user JWTs
+SUPABASE_SERVICE_ROLE_KEY=    # only if backend needs admin auth calls
+SARVAM_API_KEY=
+PAYTM_ENV=demo                # demo | staging
+PAYTM_MID=
+PAYTM_MERCHANT_KEY=
+PAYTM_WEBSITE=WEBSTAGING
+DEMO_MODE=true
+DEMO_SHORTAGE=true
+DEMO_WEBHOOK_KEY=             # signs simulated webhooks
+RESTOCK_SAFETY_PACKS=0
+APP_ENV=development
+CORS_ORIGINS=
+
+Web:
+NEXT_PUBLIC_API_BASE_URL=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=   # public/publishable key only
+
+Mobile (Expo):
+EXPO_PUBLIC_API_BASE_URL=
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=   # public/publishable key only
+
+Rules: never commit .env; no secrets in NEXT_PUBLIC_* or EXPO_PUBLIC_*
+(both are bundled into the client); .env.example has
+blank placeholders; separate credentials per environment. (Paytm PG uses
+MID + merchant key, not a client id/secret.)
+
+9. ENGINEERING CONVENTIONS
+REST JSON under /api/v1; OpenAPI via FastAPI; UTC timestamps; UUIDs;
+Decimal money; structured logs with correlation_id/task_id;
+Idempotency-Key header on approval confirm and order submit; idempotent
+webhooks; migrations in Git; seed/reset script; /health; unit + e2e
+tests for both workflows.
+
+10. DO NOT ADD IN THE 56-HOUR MVP
+PWA/service worker work (Expo covers Android); microservices/Kubernetes;
+Redis or a separate queue; vector DB/RAG; real supplier procurement or
+payment; Soundbox integration; bill OCR; WhatsApp/SMS sending;
+lending; more than one frontend framework; voice as a blocker; complex
+analytics before both workflows work.
+
+11. BUILD ORDER
+1. Repo, .env.example, local environment.
+2. Supabase project, Alembic schema, seed fixture (trd.txt §4).
+3. FastAPI /health + DB connection + JWT auth.
+4. Restock calculator + tests (4,650 / 3,970 / 4,850).
+5. Plans, approvals, state machines, shortage re-plan, simulate delivery.
+6. DEMO Paytm adapter + webhook verification path + tests.
+7. Daily brief (deterministic) and audit log API.
+8. Android app screens (home, assistant, brief, inbox, approval sheet);
+   first EAS APK by hour 16.
+9. Web dashboard views (inventory, orders, invoices, inbox, activity,
+   connections, demo controls).
+10. Text assistant + fallback parser; then Saaras voice input.
+11. Deploy (Vercel + API host); install final APK on demo phone.
+12. P1: Sarvam LLM, Bulbul read-back, Mayura, Paytm staging adapter.
+13. Rehearsal, reset, backup video, pitch claim fixes (checklist §10).
