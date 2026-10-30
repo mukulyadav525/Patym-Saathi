@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, type Href } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { BizHeader } from "@/components/biz";
@@ -13,7 +13,7 @@ const signInThen = (next: string) => ({ pathname: "/sign-in", params: { next } }
 
 export default function Profile() {
   const { session, signOut } = useAuth();
-  const { t, lang } = usePrefs();
+  const { t, lang, wakeWord, setWakeWord, speakReplies, setSpeakReplies } = usePrefs();
 
   const items: { key: StringKey; icon: IconName; go: () => void; value?: string }[] = [
     { key: "settlements", icon: "cash-outline", go: () => router.push(session ? "/settlements" : signInThen("/settlements")) },
@@ -65,6 +65,27 @@ export default function Profile() {
           <Ionicons name="chevron-forward" size={22} color={colors.ink} />
         </Pressable>
 
+        {session && (
+          <View style={s.voice}>
+            {[
+              { icon: "mic-outline" as const, title: lang === "hi" ? "“Hey Saathi” bolkar bulaayein" : "Wake with “Hey Saathi”",
+                sub: lang === "hi" ? "Sirf jab app khula ho" : "Only while the app is open on screen", value: wakeWord, set: setWakeWord },
+              { icon: "volume-high-outline" as const, title: lang === "hi" ? "Jawab bolkar sunaayein" : "Speak Saathi’s answers",
+                sub: lang === "hi" ? "Phone ki awaaz mein" : "Uses the phone’s voice", value: speakReplies, set: setSpeakReplies },
+            ].map((r) => (
+              <View key={r.title} style={s.voiceRow}>
+                <Ionicons name={r.icon} size={22} color={colors.navy} />
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Txt style={{ fontWeight: "700" }}>{r.title}</Txt>
+                  <Txt style={s.meta}>{r.sub}</Txt>
+                </View>
+                <Switch value={r.value} onValueChange={r.set} trackColor={{ true: colors.cyan, false: colors.line }} thumbColor="#fff"
+                  accessibilityLabel={r.title} />
+              </View>
+            ))}
+          </View>
+        )}
+
         {items.map((it) => (
           <Pressable key={it.key} onPress={it.go} style={({ pressed }) => [s.row, pressed && { backgroundColor: "#F5F8FB" }]} accessibilityRole="button">
             <Ionicons name={it.icon} size={26} color={colors.ink} style={{ width: 34 }} />
@@ -105,6 +126,8 @@ const s = StyleSheet.create({
   saathiIcon: { width: 36, height: 36, borderRadius: 12, backgroundColor: colors.navy, alignItems: "center", justifyContent: "center" },
   newBadge: { backgroundColor: "#E5262D", borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2, marginRight: 6 },
   newText: { color: "#fff", fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+  voice: { marginHorizontal: 16, marginTop: 8, borderRadius: radius.md, borderWidth: 1, borderColor: colors.line, paddingHorizontal: 14 },
+  voiceRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12 },
   row: { flexDirection: "row", alignItems: "center", paddingLeft: 24, paddingRight: 20 },
   rowBody: { flex: 1, flexDirection: "row", alignItems: "center", paddingVertical: 26, borderBottomWidth: 1, borderBottomColor: colors.line, marginLeft: 12 },
   rowText: { flex: 1, fontSize: 18, color: colors.ink },

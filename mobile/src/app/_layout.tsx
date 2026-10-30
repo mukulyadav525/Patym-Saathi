@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Loading } from "@/components/ui";
 import { AuthProvider, useAuth } from "@/lib/auth";
 import { PrefsProvider } from "@/lib/prefs";
+import { VoiceAgentProvider } from "@/lib/voiceAgent";
 import { colors } from "@/lib/theme";
 
 function Gate() {
@@ -43,8 +44,10 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <PrefsProvider>
         <AuthProvider>
-          <StatusBar style="dark" />
-          <Gate />
+          <VoiceAgentProvider>
+            <StatusBar style="dark" />
+            <Gate />
+          </VoiceAgentProvider>
         </AuthProvider>
       </PrefsProvider>
     </SafeAreaProvider>

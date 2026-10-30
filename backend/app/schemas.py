@@ -273,6 +273,7 @@ class ReadbackOut(BaseModel):
 class AssistantRequest(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     confirmed_budget: str | None = Field(default=None, max_length=12)
+    speak: bool = Field(default=False, description="Also return `speech`: the reply in Devanagari for a Hindi voice")
 
 
 class AssistantResponse(BaseModel):
@@ -284,6 +285,7 @@ class AssistantResponse(BaseModel):
     needs_confirmation: dict[str, Any] | None = None
     suggestions: list[str] = []
     open_screen: str | None = None  # festival | offers | khata | cashflow | bills | benchmarks | impact
+    speech: str | None = None  # what to say aloud (Devanagari when Sarvam is on), only when asked to speak
 
 
 class SimulatePaymentRequest(BaseModel):

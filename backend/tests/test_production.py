@@ -57,3 +57,22 @@ def test_slow_upload_does_not_block_other_requests(client, auth, monkeypatch):
     assert time.monotonic() - t0 < 1.0
     t.join()
     assert out["r"].status_code == 200 and out["r"].json()["lines"][0]["packs"] == 2
+
+
+def test_startup_refuses_outdated_schema():
+    import pytest
+    from sqlalchemy import text
+
+    from app.db import engine
+    from app.main import check_schema
+
+    check_schema()  # migrated test DB: fine
+    with engine.begin() as conn:
+        head = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        conn.execute(text("UPDATE alembic_version SET version_num = 'ba27487435b3'"))
+    try:
+        with pytest.raises(RuntimeError, match="alembic upgrade head"):
+            check_schema()
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE alembic_version SET version_num = :h"), {"h": head})

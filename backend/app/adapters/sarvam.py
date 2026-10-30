@@ -39,24 +39,66 @@ def _require(code: str, message: str) -> None:
         raise ApiError(503, code, message)
 
 
+def audio_mime(data: bytes, declared: str | None = None) -> str:
+    """Sarvam accepts a fixed list of audio MIME types and rejects others (e.g. "audio/m4a"); phones label
+    the same file differently. Decide from the file's own header bytes instead of trusting the label."""
+    head = data[:16]
+    if head[4:8] == b"ftyp":
+        return "audio/mp4"
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return "audio/wav"
+    if head[:4] == b"\x1aE\xdf\xa3":
+        return "audio/webm"
+    if head[:4] == b"OggS":
+        return "audio/ogg"
+    if head[:3] == b"ID3" or head[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mpeg"
+    if head[:2] in (b"\xff\xf1", b"\xff\xf9"):
+        return "audio/aac"
+    if head[:5] == b"#!AMR":
+        return "audio/amr"
+    return "application/octet-stream"
+
+
 def transcribe(audio: bytes, filename: str, content_type: str, language: str = "unknown") -> str:
+    """Speech -> text. Hindi/Hinglish (and auto) use translit mode, which returns Latin-script Hinglish
+    ("Aaj mere business mein kya important hai?") that the rule parser understands directly."""
     _require("VOICE_UNAVAILABLE", "Voice needs SARVAM_API_KEY on the server; please type instead")
+    settings = get_settings()
+    lang = language if language in LANGUAGES else "hi-IN"  # "unknown" mis-detects Hinglish as Marathi
+    data = {"model": settings.sarvam_stt_model, "language_code": lang}
+    if lang == "hi-IN" and settings.sarvam_stt_model.startswith("saaras:v3"):
+        data["mode"] = settings.sarvam_stt_mode
     try:
         resp = httpx.post(
             f"{BASE}/speech-to-text",
             headers=_headers(),
-            files={"file": (filename, audio, content_type)},
-            data={"model": get_settings().sarvam_stt_model, "language_code": language},
+            files={"file": (filename, audio, audio_mime(audio, content_type))},
+            data=data,
             timeout=TIMEOUT,
         )
         resp.raise_for_status()
         transcript = resp.json().get("transcript", "").strip()
     except (httpx.HTTPError, ValueError) as exc:
-        raise ApiError(503, "VOICE_UNAVAILABLE", "Could not understand audio right now; please type instead") from exc
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Could not understand audio right now; please try again") from exc
     if not transcript:
         raise ApiError(422, "EMPTY_TRANSCRIPT", "Didn't catch that; please try again or type")
     return transcript
 
+
+def to_devanagari(text: str) -> str:
+    """Latin Hinglish reply -> Devanagari so a Hindi voice reads it naturally. Unchanged on failure."""
+    if not enabled() or not text.strip():
+        return text
+    try:
+        resp = httpx.post(f"{BASE}/transliterate", headers=_headers(),
+                          json={"input": text[:1000], "source_language_code": "en-IN", "target_language_code": "hi-IN",
+                                "numerals_format": "international"}, timeout=TIMEOUT)
+        resp.raise_for_status()
+        out = (resp.json().get("transliterated_text") or "").strip()
+        return out.replace("Rs.", "₹") or text
+    except (httpx.HTTPError, ValueError):
+        return text
 
 INDIC = re.compile(r"[\u0900-\u0D7F]")
 
@@ -103,7 +145,7 @@ def extract_intent(text: str) -> dict:
 
 
 def speak(text: str, language: str = "hi-IN") -> str:
-    """Bulbul text-to-speech. Returns base64 WAV. The text is built server-side from stored records."""
+    """Bulbul text-to-speech. Returns base64 MP3. The text is built server-side from stored records."""
     _require("VOICE_UNAVAILABLE", "Voice needs SARVAM_API_KEY on the server")
     if language not in LANGUAGES:
         raise ApiError(422, "UNSUPPORTED_LANGUAGE", "Language not supported for voice")
@@ -111,7 +153,9 @@ def speak(text: str, language: str = "hi-IN") -> str:
         resp = httpx.post(
             f"{BASE}/text-to-speech",
             headers=_headers(),
-            json={"text": text[:2400], "language_code": language, "model": get_settings().sarvam_tts_model},
+            # MP3 is ~14x smaller than WAV: a spoken reply reaches the phone in a fraction of the time.
+            json={"text": text[:2400], "language_code": language, "model": get_settings().sarvam_tts_model,
+                  "output_audio_codec": "mp3"},
             timeout=20.0,
         )
         resp.raise_for_status()
@@ -217,3 +261,22 @@ def _html_to_lines(text: str) -> str:
     text = re.sub(r"(?i)</t[dh]>", "  ", text)
     text = html.unescape(re.sub(r"<[^>]+>", "", text))
     return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+def chat(system: str, user: str, max_tokens: int = 200) -> str | None:
+    """One grounded chat turn (sarvam-105b, reasoning off for speed). None on any failure: callers fall back."""
+    if not enabled():
+        return None
+    try:
+        resp = httpx.post(
+            f"{BASE}/v1/chat/completions",
+            headers=_headers(),
+            json={"model": get_settings().sarvam_llm_model, "temperature": 0.2, "reasoning_effort": None,
+                  "max_tokens": max_tokens,
+                  "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]},
+            timeout=TIMEOUT,
+        )
+        resp.raise_for_status()
+        return (resp.json()["choices"][0]["message"]["content"] or "").strip() or None
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
+        return None

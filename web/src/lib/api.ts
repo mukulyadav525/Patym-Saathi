@@ -71,7 +71,8 @@ export const api = {
   connections: () => request<S["ConnectionOut"][]>("GET", "/api/v1/connections"),
   tools: () => request<S["ToolOut"][]>("GET", "/api/v1/tools"),
   audit: (cursor?: string) => request<S["Page"]>("GET", `/api/v1/audit?limit=100${cursor ? `&cursor=${cursor}` : ""}`),
-  ask: (text: string) => request<S["AssistantResponse"]>("POST", "/api/v1/assistant/message", { text }, {}, SLOW_MS),
+  ask: (text: string, speak = false) =>
+    request<S["AssistantResponse"]>("POST", "/api/v1/assistant/message", { text, speak }, {}, SLOW_MS),
   renewApproval: (taskId: string) => request<TaskDetail>("POST", `/api/v1/tasks/${taskId}/renew-approval`),
   confirm: (approvalId: string, key: string, pin?: string) =>
     request<TaskDetail>("POST", `/api/v1/approvals/${approvalId}/confirm`, undefined,

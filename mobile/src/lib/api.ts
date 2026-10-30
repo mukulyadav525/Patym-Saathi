@@ -120,8 +120,8 @@ export const api = {
   approvals: () => request<Approval[]>("GET", "/api/v1/approvals"),
   connections: () => request<Connection[]>("GET", "/api/v1/connections"),
   audit: (cursor?: string) => request<S["Page"]>("GET", `/api/v1/audit?limit=50${cursor ? `&cursor=${cursor}` : ""}`),
-  ask: (text: string, confirmed_budget?: string) =>
-    request<AssistantResponse>("POST", "/api/v1/assistant/message", { text, confirmed_budget }, {}, SLOW_MS),
+  ask: (text: string, confirmed_budget?: string, speak = false) =>
+    request<AssistantResponse>("POST", "/api/v1/assistant/message", { text, confirmed_budget, speak }, {}, SLOW_MS),
   askVoiceLang: (form: FormData, language: string) =>
     request<AssistantResponse>("POST", `/api/v1/assistant/voice?language=${encodeURIComponent(language)}`, form, {}, SLOW_MS),
   // One key per tap sequence: a retry of the same tap reuses it so it can never double-order.

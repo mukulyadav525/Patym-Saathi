@@ -122,7 +122,14 @@ def get_brief(ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) ->
 def assistant_message(body: s.AssistantRequest, ctx: Ctx = Depends(current_ctx),
                       db: Session = Depends(get_db)) -> s.AssistantResponse:
     ratelimit.check(ctx.merchant_id, "assistant")
-    return assistant.handle(db, ctx, body)
+    original = body.text
+    # On-device speech recognition sends Hindi in Devanagari; the parser and name matching work on Latin Hinglish.
+    if sarvam.INDIC.search(body.text):
+        body = body.model_copy(update={"text": sarvam.romanize(body.text)[:500]})
+    resp = assistant.handle(db, ctx, body, transcript=original if original != body.text else None)
+    if body.speak:
+        resp.speech = assistant.speech_for(resp)
+    return resp
 
 
 @api.post("/assistant/voice", response_model=s.AssistantResponse)
@@ -139,7 +146,9 @@ async def assistant_voice(audio: UploadFile = File(...), language: str = Query("
         transcript = sarvam.transcribe(data, filename, content_type, language)
         # Saaras returns Devanagari for Hindi; the parser works on Latin/Hinglish. Show the original, parse the romanized.
         parse_text = sarvam.romanize(transcript)
-        return assistant.handle(db, ctx, s.AssistantRequest(text=parse_text[:500]), channel="VOICE", transcript=transcript)
+        resp = assistant.handle(db, ctx, s.AssistantRequest(text=parse_text[:500]), channel="VOICE", transcript=transcript)
+        resp.speech = assistant.speech_for(resp)
+        return resp
 
     return await run_in_threadpool(work)
 
@@ -153,7 +162,7 @@ def task_readback(task_id: uuid.UUID, lang: str = Query("hi-IN", pattern="^(hi|e
     if not audio or not sarvam.enabled():
         return s.ReadbackOut(text=text, voice="LIVE" if sarvam.enabled() else "OFF")
     ratelimit.check(ctx.merchant_id, "speech")
-    return s.ReadbackOut(text=text, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
+    return s.ReadbackOut(text=text, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/mpeg")
 
 
 @api.get("/tasks", response_model=list[s.TaskSummary])

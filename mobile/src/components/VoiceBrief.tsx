@@ -5,10 +5,12 @@ import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Txt } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { playBase64, stopPlayback } from "@/lib/voice";
+import { useVoiceAgent } from "@/lib/voiceAgent";
 import { colors, radius } from "@/lib/theme";
 
 // "Suno" morning brief: text built on the server from records; spoken by Sarvam Bulbul when configured.
 export function VoiceBrief() {
+  const agent = useVoiceAgent();
   const [lang, setLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [busy, setBusy] = useState(false);
   const [text, setText] = useState<string | null>(null);
@@ -21,7 +23,10 @@ export function VoiceBrief() {
     try {
       const res = await api.briefSpeech(lang, true);
       setText(res.text);
-      if (res.audio_base64) await playBase64(res.audio_base64, res.mime ?? "audio/wav");
+      if (res.audio_base64) {
+        agent.pause("brief"); // don't let the wake-word listener hear the brief ("...Saathi aapki manzoori...")
+        await playBase64(res.audio_base64, res.mime ?? "audio/mpeg", () => agent.resume("brief"));
+      }
       else setNote("Voice is off (no Sarvam key on the server). Showing the text instead.");
     } catch (e) {
       setNote(e instanceof ApiError ? e.message : "Couldn't play the brief");

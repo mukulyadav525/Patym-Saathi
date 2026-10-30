@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router, Tabs } from "expo-router";
+import { Tabs } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Txt, type IconName } from "@/components/ui";
 import { colors, shadow } from "@/lib/theme";
+import { useVoiceAgent } from "@/lib/voiceAgent";
 
 const TABS: { name: string; label: string; icon: IconName; active: IconName }[] = [
   { name: "index", label: "Home", icon: "home-outline", active: "home" },
@@ -15,6 +16,7 @@ const TABS: { name: string; label: string; icon: IconName; active: IconName }[] 
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
+  const agent = useVoiceAgent();
   return (
     <Tabs
       screenOptions={{ headerShown: false }}
@@ -46,7 +48,8 @@ export default function TabsLayout() {
               <Pressable
                 style={s.mic}
                 accessibilityLabel="Speak to Saathi"
-                onPress={() => router.navigate({ pathname: "/saathi/assistant", params: { listen: String(Date.now()) } })}
+                accessibilityHint="Ask a question by voice, or say Hey Saathi any time"
+                onPress={agent.activate}
               >
                 <Ionicons name="mic" size={26} color="#fff" />
               </Pressable>

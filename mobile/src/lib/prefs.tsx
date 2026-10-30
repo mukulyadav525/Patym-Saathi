@@ -7,9 +7,11 @@ const KEY = "saathi.prefs";
 
 export type Lang = "en" | "hi";
 export type NotifyPrefs = { soundbox: boolean; push: boolean; sms: boolean; settlement: boolean };
-type Prefs = { lang: Lang; notify: NotifyPrefs };
+type Prefs = { lang: Lang; notify: NotifyPrefs; wakeWord: boolean; speakReplies: boolean };
 
-const DEFAULTS: Prefs = { lang: "en", notify: { soundbox: true, push: true, sms: false, settlement: true } };
+const DEFAULTS: Prefs = {
+  lang: "en", notify: { soundbox: true, push: true, sms: false, settlement: true }, wakeWord: true, speakReplies: true,
+};
 
 const store = {
   get: async () => (Platform.OS === "web" ? globalThis.localStorage?.getItem(KEY) ?? null : SecureStore.getItemAsync(KEY)),
@@ -75,6 +77,8 @@ type PrefsState = Prefs & {
   t: (k: StringKey) => string;
   setLang: (l: Lang) => void;
   setNotify: (k: keyof NotifyPrefs, v: boolean) => void;
+  setWakeWord: (v: boolean) => void;
+  setSpeakReplies: (v: boolean) => void;
 };
 
 const PrefsContext = createContext<PrefsState | null>(null);
@@ -101,6 +105,8 @@ export function PrefsProvider({ children }: { children: ReactNode }) {
     t: (k) => STRINGS[prefs.lang][k],
     setLang: (lang) => update((p) => ({ ...p, lang })),
     setNotify: (k, v) => update((p) => ({ ...p, notify: { ...p.notify, [k]: v } })),
+    setWakeWord: (v) => update((p) => ({ ...p, wakeWord: v })),
+    setSpeakReplies: (v) => update((p) => ({ ...p, speakReplies: v })),
   }), [prefs, update]);
 
   return <PrefsContext.Provider value={value}>{children}</PrefsContext.Provider>;

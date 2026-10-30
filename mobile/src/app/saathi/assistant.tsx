@@ -14,6 +14,9 @@ import { PlanSummary } from "@/components/PlanSummary";
 import { Brand, Button, Card, Row, Txt, styles as ui } from "@/components/ui";
 import { api, ApiError, type AssistantResponse } from "@/lib/api";
 import { clock } from "@/lib/hooks";
+import { usePrefs } from "@/lib/prefs";
+import { speakText } from "@/lib/voice";
+import { useVoiceAgent } from "@/lib/voiceAgent";
 import { colors, radius } from "@/lib/theme";
 
 type Msg =
@@ -45,6 +48,8 @@ const id = () => Math.random().toString(36).slice(2);
 
 export default function Assistant() {
   const params = useLocalSearchParams<{ listen?: string; prompt?: string }>();
+  const agent = useVoiceAgent();
+  const { speakReplies } = usePrefs();
   const [lang, setLang] = useState<"hi-IN" | "en-IN">("hi-IN");
   const [input, setInput] = useState("");
   const [msgs, setMsgs] = useState<Msg[]>([]);
@@ -79,6 +84,11 @@ export default function Assistant() {
       const res = await call();
       if (res.transcript) push({ id: id(), from: "me", text: res.transcript, at: now(), voice: true });
       push({ id: id(), from: "saathi", at: now(), res, originalText });
+      // Spoken requests get a spoken answer (the server adds `speech` for voice).
+      if (res.speech && speakReplies) {
+        agent.pause("speaking-chat");
+        speakText(res.speech, () => agent.resume("speaking-chat"));
+      }
     } catch (e) {
       const message = e instanceof ApiError ? e.message : String(e);
       push({ id: id(), from: "saathi", at: now(), text: message, error: true });
@@ -107,8 +117,9 @@ export default function Assistant() {
       recordingRef.current = false;
       setRecording(false);
       void recorder.stop().catch(() => undefined);
+      agent.resume("recording");
       void setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
-    }, [recorder]),
+    }, [recorder, agent]),
   );
 
   async function toggleMic() {
@@ -122,6 +133,7 @@ export default function Assistant() {
         return;
       } finally {
         await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => undefined);
+        agent.resume("recording");
       }
       const uri = recorder.uri;
       if (!uri) return;
@@ -140,11 +152,13 @@ export default function Assistant() {
       inputRef.current?.focus();
       return;
     }
+    agent.pause("recording"); // the Hey Saathi listener and the recorder can't share the mic
     try {
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
       await recorder.prepareToRecordAsync();
       recorder.record();
     } catch {
+      agent.resume("recording");
       // Mic busy (a call, another app) or the recorder failed to start: say so and fall back to typing.
       push({ id: id(), from: "saathi", at: now(), text: "Couldn't start the microphone. Please type your request below.", error: true });
       inputRef.current?.focus();

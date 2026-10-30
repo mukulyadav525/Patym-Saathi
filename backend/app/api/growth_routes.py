@@ -95,7 +95,7 @@ def brief_speech(lang: str = Query("hi-IN", pattern=r"^[a-z]{2}-IN$"), audio: bo
     if not audio or not sarvam.enabled():
         return s.SpeechOut(text=text, language=language, voice="LIVE" if sarvam.enabled() else "OFF")
     ratelimit.check(ctx.merchant_id, "speech")
-    return s.SpeechOut(text=text, language=language, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
+    return s.SpeechOut(text=text, language=language, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/mpeg")
 
 
 @growth_api.get("/languages", response_model=list[s.LanguageOut])

@@ -2,12 +2,14 @@
   "name": "paytm-saathi",
   "private": true,
   "scripts": {
-    "api": "cd backend && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload",
+    "api": "cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app",
     "seed": "cd backend && uv run alembic upgrade head && uv run python -m app.seed",
     "test:api": "cd backend && uv run pytest -q",
     "types": "openapi-typescript http://localhost:8000/openapi.json -o shared/api-types.ts",
     "web": "npm --prefix web run dev",
-    "mobile": "npm --prefix mobile start"
+    "mobile": "npm --prefix mobile start",
+    "api:prod": "cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-access-log",
+    "web:prod": "npm --prefix web run build && npm --prefix web run start -- -p 3000"
   },
   "devDependencies": {
     "openapi-typescript": "^7.4.0"

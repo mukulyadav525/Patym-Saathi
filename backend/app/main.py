@@ -1,4 +1,5 @@
 import asyncio
+import os
 import json
 import logging
 import time
@@ -42,9 +43,29 @@ def _check_production_settings() -> None:
 _check_production_settings()
 
 
+def check_schema() -> None:
+    """Refuse to serve on a database whose schema is behind the code (every query would 500).
+    Run `alembic upgrade head` first; `npm run api` and the Docker image both do."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    base = os.path.dirname(os.path.dirname(__file__))
+    cfg = Config(os.path.join(base, "alembic.ini"))
+    cfg.set_main_option("script_location", os.path.join(base, "migrations"))
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    with engine.connect() as conn:
+        current = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    if current != head:
+        raise RuntimeError(f"Database schema is at {current}, code needs {head}: run `alembic upgrade head`")
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """Optional proactive Saathi check on an interval (AGENT_SCAN_INTERVAL_MIN). It only drafts tasks."""
+    """Schema check, then the optional proactive Saathi check on an interval (AGENT_SCAN_INTERVAL_MIN)."""
+    check_schema()
     interval = get_settings().agent_scan_interval_min
     job = None
     if interval > 0:

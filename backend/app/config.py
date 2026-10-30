@@ -35,7 +35,9 @@ class Settings(BaseSettings):
 
     # Sarvam (optional; text fallback when unset)
     sarvam_api_key: str | None = None
-    sarvam_stt_model: str = "saaras:v4"
+    # saaras:v3 + translit returns Hinglish in Latin script (what the parser reads), in ~0.4 s.
+    sarvam_stt_model: str = "saaras:v3"
+    sarvam_stt_mode: str = "translit"
     sarvam_llm_model: str = "sarvam-105b"
     sarvam_tts_model: str = "bulbul:v3"
     sarvam_translate_model: str = "mayura:v1"

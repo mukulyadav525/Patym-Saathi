@@ -1,5 +1,6 @@
 """Orchestrator: text/voice -> intent -> workflow. The LLM only proposes; workflows decide."""
 
+import re
 import uuid
 from decimal import Decimal
 
@@ -11,7 +12,7 @@ from app.adapters import sarvam
 from app.errors import ApiError, parse_money
 from app.models import Invoice, Task
 from app.security import Ctx
-from app.services import audit, brief, dues_flow, growth, intent, restock_flow, views
+from app.services import answers, audit, brief, dues_flow, growth, intent, restock_flow, views
 from app.services.common import move_task, new_correlation_id
 from app.services.states import UNPAID
 
@@ -39,13 +40,27 @@ def _budget(value: str) -> Decimal:
     return parse_money(value, "Budget", str(MIN_BUDGET), str(MAX_BUDGET))
 
 
+WAKE = re.compile(r"^\s*(?:(?:hey|hi|hello|ok|okay|he|hay|ae|aye|हे|हाय|ओके)[\s,]+)?(?:saathi|sathi|saathee|sathee|"
+                  r"saati|sati|साथी|साथि|सारथी)(?=[\s,.!?:।-]|$)[\s,.!:।-]*", re.I)
+
+
+def strip_wake_word(text: str) -> str:
+    """'Hey Saathi, atta kitna hai?' -> 'atta kitna hai?'"""
+    return WAKE.sub("", text, count=1).strip()
+
+
 def handle(db: Session, ctx: Ctx, req: s.AssistantRequest, channel: str = "TEXT",
            transcript: str | None = None) -> s.AssistantResponse:
-    text = req.text.strip()
+    text = strip_wake_word(req.text.strip()) or req.text.strip()
+    if not req.confirmed_budget and answers.is_question(text):
+        quick = answers.quick_answer(db, ctx, text)
+        if quick:
+            return s.AssistantResponse(reply=quick[0], intent="ANSWER", transcript=transcript, suggestions=quick[1])
     open_invoices = db.scalars(select(Invoice).where(Invoice.merchant_id == ctx.merchant_id,
                                                      Invoice.status.in_(UNPAID))).all()
     parsed = intent.parse(text, [i.customer_name for i in open_invoices])
-    if parsed.intent == "UNKNOWN" or (parsed.intent == "RESTOCK" and parsed.budget is None):
+    # Questions go straight to the grounded answer below (one model call, not two).
+    if (parsed.intent == "UNKNOWN" and not answers.is_question(text)) or (parsed.intent == "RESTOCK" and parsed.budget is None):
         parsed = intent.merge_llm_candidate(parsed, sarvam.extract_intent(text))
     if req.confirmed_budget:
         parsed.budget = _budget(req.confirmed_budget)
@@ -129,6 +144,9 @@ def handle(db: Session, ctx: Ctx, req: s.AssistantRequest, channel: str = "TEXT"
                   "Payment link aur message taiyaar hai, approve karein.",
             intent="COLLECT_DUE", transcript=transcript, task=views.task_detail(db, ctx.merchant_id, task.id))
 
+    answer = answers.llm_answer(db, ctx, text)
+    if answer:
+        return s.AssistantResponse(reply=answer, intent="ANSWER", transcript=transcript)
     return s.AssistantResponse(reply="Main stock planning, Diwali stock, dues, khata, cash flow, offers aur daily brief "
                                      "mein madad kar sakta hoon.",
                                intent="UNKNOWN", transcript=transcript, suggestions=SUGGESTIONS)
@@ -185,3 +203,12 @@ def start_collect_for_invoice(db: Session, ctx: Ctx, invoice: Invoice) -> Task:
     dues_flow.start_collect(db, task, invoice, ctx.merchant, ctx.actor)
     db.commit()
     return task
+
+
+def speech_for(resp: s.AssistantResponse) -> str:
+    """What to say aloud: the reply, plus the brief's priorities when the reply introduces them."""
+    parts = [resp.reply]
+    if resp.brief is not None:
+        parts += [f"{p.title}. {p.detail}." for p in resp.brief.priorities]
+    text = " ".join(parts)
+    return sarvam.to_devanagari(text)

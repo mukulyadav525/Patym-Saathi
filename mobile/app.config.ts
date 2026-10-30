@@ -30,6 +30,11 @@ const config: ExpoConfig = {
     "expo-status-bar",
     "expo-secure-store",
     ["expo-audio", { microphonePermission: "Saathi uses the microphone only when you tap the mic to speak a request." }],
+    ["expo-speech-recognition", {
+      microphonePermission: "Saathi listens for “Hey Saathi” only while the app is open on screen.",
+      speechRecognitionPermission: "Saathi turns your spoken request into text to answer it.",
+      androidSpeechServicePackages: ["com.google.android.googlequicksearchbox", "com.google.android.tts"],
+    }],
     ["expo-image-picker", {
       cameraPermission: "Saathi uses the camera only when you take a photo of a supplier bill.",
       photosPermission: "Saathi opens your photos only when you pick a supplier bill.",

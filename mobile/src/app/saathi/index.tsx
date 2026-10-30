@@ -6,6 +6,8 @@ import { Alert, Pressable, StyleSheet, View } from "react-native";
 import { BriefList } from "@/components/BriefList";
 import { GrowGrid } from "@/components/grow";
 import { VoiceBrief } from "@/components/VoiceBrief";
+import { usePrefs } from "@/lib/prefs";
+import { useVoiceAgent } from "@/lib/voiceAgent";
 import { Brand, Card, ErrorState, IconTile, Loading, Row, Screen, SectionTitle, Txt, styles as ui, type IconName } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -18,6 +20,21 @@ const ACTIONS: { label: string; icon: IconName; tone: Tone; go: () => void }[] =
   { label: "Stock", icon: "cube-outline", tone: "amber", go: () => router.push("/inventory") },
   { label: "Reports", icon: "bar-chart-outline", tone: "violet", go: () => router.push("/brief") },
 ];
+
+// Shows that Saathi is listening for its name (and how to turn it on when it isn't).
+function WakeHint() {
+  const agent = useVoiceAgent();
+  const { wakeWord } = usePrefs();
+  const on = wakeWord && agent.available && agent.phase !== "off";
+  return (
+    <Pressable onPress={on ? agent.activate : () => router.push("/profile")} style={s.wake} accessibilityRole="button">
+      <View style={[s.wakeDot, { backgroundColor: on ? colors.green : colors.muted }]} />
+      <Txt style={{ fontSize: 12, color: colors.inkSoft, flex: 1 }}>
+        {on ? "Bolein “Hey Saathi” — jaise “Hey Saathi, atta kitna bacha hai?”" : "“Hey Saathi” off · Profile mein chaalu karein"}
+      </Txt>
+    </Pressable>
+  );
+}
 
 export default function Home() {
   const { session } = useAuth();
@@ -140,6 +157,7 @@ export default function Home() {
             <Txt style={[ui.h2, { marginBottom: 10 }]}>{data.brief.priorities.length} things need your attention</Txt>
             <BriefList brief={data.brief} compact />
             <VoiceBrief />
+            <WakeHint />
           </View>
 
           <View style={{ height: 12 }} />
@@ -210,6 +228,8 @@ const s = StyleSheet.create({
   bellDot: { position: "absolute", top: 0, right: 0, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.red, borderWidth: 1, borderColor: "#fff" },
   grow: { backgroundColor: "#EAF5FC", borderWidth: 1, borderColor: "#CDEBFA", marginTop: 12 },
   growIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  wake: { flexDirection: "row", alignItems: "center", marginTop: 10, gap: 8 },
+  wakeDot: { width: 8, height: 8, borderRadius: 4 },
   festival: { flexDirection: "row", alignItems: "center", backgroundColor: "#3B1D5E", borderRadius: radius.lg, padding: 14, marginBottom: 12 },
   diya: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.12)", alignItems: "center", justifyContent: "center" },
   impact: { backgroundColor: colors.greenSoft, borderWidth: 1, borderColor: "#BFE6CC" },

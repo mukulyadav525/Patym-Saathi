@@ -917,6 +917,12 @@ export interface components {
             text: string;
             /** Confirmed Budget */
             confirmed_budget?: string | null;
+            /**
+             * Speak
+             * @description Also return `speech`: the reply in Devanagari for a Hindi voice
+             * @default false
+             */
+            speak: boolean;
         };
         /** AssistantResponse */
         AssistantResponse: {
@@ -939,6 +945,8 @@ export interface components {
             suggestions: string[];
             /** Open Screen */
             open_screen?: string | null;
+            /** Speech */
+            speech?: string | null;
         };
         /** AuditOut */
         AuditOut: {

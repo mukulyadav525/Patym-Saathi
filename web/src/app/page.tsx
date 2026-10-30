@@ -1,14 +1,15 @@
 "use client";
 
-import { AlertCircle, AlertTriangle, ArrowRight, Info, Send } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRight, Info, Mic, Send } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { DuesDonut, SalesBars } from "@/components/charts";
 import { Badge, Button, Card, ErrorBox, PageTitle, Skeleton, StateBadge, useLoad } from "@/components/ui";
 import { api, ApiError, rupees, when } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { createRecognizer, speak, stopSpeaking, type Recognizer } from "@/lib/voice";
 
 const SEV = { high: AlertCircle, medium: AlertTriangle, info: Info } as const;
 const SEV_COLOR = { high: "text-red", medium: "text-amber", info: "text-cyan" } as const;
@@ -24,14 +25,14 @@ export default function Overview() {
   const [reply, setReply] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const ask = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!text.trim()) return;
+  const send = async (value: string, spoken = false) => {
+    if (!value.trim()) return;
     setBusy(true);
     try {
-      const res = await api.ask(text);
+      const res = await api.ask(value, spoken);
       setReply(res.reply);
       setText("");
+      if (spoken) speak(res.speech || res.reply);
       if (res.task) router.push(`/tasks/${res.task.id}`);
       else void dash.reload();
     } catch (err) {
@@ -40,6 +41,47 @@ export default function Overview() {
       setBusy(false);
     }
   };
+  const ask = (e: FormEvent) => {
+    e.preventDefault();
+    void send(text);
+  };
+
+  // Voice: speak a question ("Hey Saathi, atta kitna bacha hai?"); the answer is shown and read aloud.
+  const recRef = useRef<Recognizer | null>(null);
+  const [listening, setListening] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
+  const toggleMic = () => {
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = createRecognizer();
+    if (!rec) {
+      setMicError("Voice needs Chrome or Edge. You can type your question instead.");
+      return;
+    }
+    stopSpeaking();
+    setMicError(null);
+    let finalText = "";
+    rec.onresult = (ev) => {
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i += 1) {
+        const r = ev.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      setText((finalText + interim).trim());
+    };
+    rec.onerror = (ev) => setMicError(ev.error === "not-allowed" ? "Microphone permission is blocked for this site." : `Didn't catch that (${ev.error}).`);
+    rec.onend = () => {
+      setListening(false);
+      if (finalText.trim()) void send(finalText.trim(), true);
+    };
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+  useEffect(() => () => recRef.current?.abort(), []);
 
   // Each brief priority has a quick action: collect starts a payment-link draft, restock asks Saathi for a plan.
   const act = async (p: NonNullable<typeof dash.data>["brief"]["priorities"][number]) => {
@@ -72,8 +114,14 @@ export default function Overview() {
       <form onSubmit={ask} className="card mb-6 flex items-center gap-2 p-2 pl-4">
         <input value={text} onChange={(e) => setText(e.target.value)} maxLength={500} aria-label="Ask Saathi"
           placeholder='Ask Saathi — e.g. "Weekend ke liye ₹5,000 ke andar stock arrange karo"' className="h-11 flex-1 bg-transparent text-sm outline-none" />
+        <button type="button" onClick={toggleMic} aria-label={listening ? "Stop listening" : "Ask by voice"}
+          className={`flex size-11 items-center justify-center rounded-full ${listening ? "animate-pulse bg-red text-white" : "bg-cyan-soft text-navy hover:bg-[#d4f1fb]"}`}>
+          <Mic className="size-5" />
+        </button>
         <Button type="submit" loading={busy}><Send className="size-4" /> Ask</Button>
       </form>
+      {listening && <p className="-mt-4 mb-6 px-2 text-sm font-semibold text-red">Listening… bolein jaise “atta kitna bacha hai?”</p>}
+      {micError && <p className="-mt-4 mb-6 px-2 text-sm text-red">{micError}</p>}
       {reply && <p className="-mt-4 mb-6 px-2 text-sm text-ink-soft">Saathi: {reply}</p>}
 
       {dash.error && !d ? <ErrorBox error={dash.error} onRetry={dash.reload} /> : !d ? <Skeleton /> : (

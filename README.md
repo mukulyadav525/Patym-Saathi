@@ -34,6 +34,22 @@ web/       Next.js 16 · Tailwind 4
 shared/    api-types.ts generated from the FastAPI OpenAPI schema
 ```
 
+## Demo mode (fast, works on a phone hotspot)
+
+Run everything on the laptop with the **local** Postgres (`DATABASE_URL=postgresql+psycopg://localhost/paytm_saathi?host=/tmp`):
+every screen answers in ~10–20 ms. Using Supabase from a laptop in India adds a Delhi↔Singapore round trip per query
+(0.5–2 s per screen), so use Supabase only when the API is deployed in the same region as the database.
+
+```bash
+npm run api:prod    # migrations + API, 2 workers, no reloader
+npm run web:prod    # production build of the dashboard on :3000
+```
+
+**Voice:** say “Hey Saathi” while the app is open (on-device recognition; foreground only), or tap the mic in the tab bar.
+Ask anything about the shop (“atta kitna bacha hai?”, “Aman ka kitna baaki hai?”, “pichhle hafte kitni bikri hui?”):
+common questions are answered instantly from records; others by Sarvam with only this shop's data, and any number not in
+the records is rejected. Answers are spoken back. Orders and payment links still need an on-screen approval.
+
 ## Run locally
 
 Prereqs: Python via `uv`, Node 22, PostgreSQL (local) **or** a Supabase project.
