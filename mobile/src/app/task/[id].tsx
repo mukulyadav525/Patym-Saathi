@@ -69,7 +69,7 @@ export default function TaskScreen() {
           )}
         </Card>
 
-        {task.task_type === "RESTOCK" && plan && <PlanBlock task={task} />}
+        {task.task_type === "RESTOCK" && plan && <PlanBlock task={task} awaiting={!!pending} />}
         {task.task_type === "COLLECT_DUE" && task.invoice && <DuesBlock task={task} onChanged={reload} />}
 
         {task.orders.length > 0 && (
@@ -166,7 +166,7 @@ export default function TaskScreen() {
   );
 }
 
-function PlanBlock({ task }: { task: TaskDetail }) {
+function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) {
   const plan = task.plans[task.plans.length - 1];
   const [showEvidence, setShowEvidence] = useState(false);
   return (
@@ -175,7 +175,7 @@ function PlanBlock({ task }: { task: TaskDetail }) {
         <Card style={s.changed}>
           <Row style={{ marginBottom: 6 }}>
             <Ionicons name="swap-horizontal" size={18} color={colors.amber} />
-            <Txt style={{ fontWeight: "800", marginLeft: 6, color: colors.amber }}>Plan changed — needs approval again</Txt>
+            <Txt style={{ fontWeight: "800", marginLeft: 6, color: colors.amber }}>{awaiting ? "Plan changed — needs approval again" : "Plan changed after a supplier shortage"}</Txt>
           </Row>
           {plan.diff.map((d) => (
             <Txt key={d.name} style={{ marginTop: 2 }}>

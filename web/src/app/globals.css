@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Shared design tokens (mirrored in mobile/src/lib/theme.ts). The dashboard is light-only, like the app. */
+:root {
+  --navy: #002e6e;
+  --cyan: #00b9f1;
+  --cyan-soft: #e5f7fd;
+  --bg: #f3f7fb;
+  --ink: #0b1b33;
+  --ink-soft: #4a5b73;
+  --muted: #8a98ac;
+  --line: #e3eaf2;
+  --green: #12a150;
+  --green-soft: #e6f6ec;
+  --amber: #e08a00;
+  --amber-soft: #fff4e0;
+  --red: #d93a3a;
+  --red-soft: #fdecec;
+  --violet: #6b5ce7;
+  --violet-soft: #efedfd;
+  color-scheme: light;
+}
+
+@theme inline {
+  --color-navy: var(--navy);
+  --color-cyan: var(--cyan);
+  --color-cyan-soft: var(--cyan-soft);
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-green: var(--green);
+  --color-green-soft: var(--green-soft);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-red: var(--red);
+  --color-red-soft: var(--red-soft);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.card {
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 4px 14px rgba(11, 27, 51, 0.05);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
