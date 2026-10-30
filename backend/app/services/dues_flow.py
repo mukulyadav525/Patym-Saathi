@@ -1,9 +1,8 @@
 """Dues collection (prd.txt §5.2). Invoice reaches PAID only through `process_webhook`:
 signature -> dedupe -> server-side status fetch -> 4-field check (MID, order ID, amount, status)."""
 
-import json
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -113,27 +112,16 @@ def _task_for(db: Session, invoice: Invoice) -> Task | None:
 
 def process_webhook(db: Session, headers: dict[str, str], body: bytes) -> dict:
     adapter = get_adapter()
-    try:
-        data = json.loads(body)
-    except ValueError:
-        raise ApiError(400, "BAD_PAYLOAD", "Webhook body is not JSON")
-    event_id = str(data.get("eventId") or data.get("TXNID") or "")
-    if not event_id:
+    signature_ok, evt = adapter.parse_webhook({k.lower(): v for k, v in headers.items()}, body)
+    if not evt.event_id:
         raise ApiError(400, "BAD_PAYLOAD", "Missing event id")
-
-    signature_ok = adapter.verify_webhook({k.lower(): v for k, v in headers.items()}, body)
-    if db.scalar(select(PaymentEvent.id).where(PaymentEvent.provider_event_id == event_id)):
+    if db.scalar(select(PaymentEvent.id).where(PaymentEvent.provider_event_id == evt.event_id)):
         return {"outcome": "DUPLICATE_IGNORED"}
 
-    redacted = {k: v for k, v in data.items() if k in ("ORDERID", "TXNAMOUNT", "STATUS", "PAYMENTMODE", "CURRENCY")}
-    event = PaymentEvent(provider="PAYTM_" + adapter.mode, provider_event_id=event_id,
-                         provider_order_id=data.get("ORDERID"), txn_id=data.get("TXNID"),
-                         provider_status=data.get("STATUS"), signature_verified=signature_ok,
-                         raw_payload_redacted=redacted)
-    try:
-        event.amount = Decimal(str(data.get("TXNAMOUNT")))
-    except (InvalidOperation, TypeError):
-        event.amount = None
+    event = PaymentEvent(provider="PAYTM_" + adapter.mode, provider_event_id=evt.event_id,
+                         provider_order_id=evt.provider_order_id, txn_id=evt.txn_id, amount=evt.amount,
+                         provider_status=evt.status, signature_verified=signature_ok,
+                         raw_payload_redacted=evt.redacted)
     db.add(event)
     try:
         db.flush()
@@ -141,7 +129,7 @@ def process_webhook(db: Session, headers: dict[str, str], body: bytes) -> dict:
         db.rollback()
         return {"outcome": "DUPLICATE_IGNORED"}
 
-    invoice = db.scalars(select(Invoice).where(Invoice.provider_order_id == data.get("ORDERID"))).first()
+    invoice = db.scalars(select(Invoice).where(Invoice.provider_order_id == evt.order_ref)).first() if evt.order_ref else None
     if invoice is not None:
         event.merchant_id = invoice.merchant_id
         event.invoice_id = invoice.id
@@ -167,7 +155,7 @@ def process_webhook(db: Session, headers: dict[str, str], body: bytes) -> dict:
         return {"outcome": event.outcome}
 
     registry.authorize("check_txn_status", Caller.VERIFICATION)
-    status = adapter.fetch_status(db, invoice.provider_order_id)
+    status = adapter.fetch_status(db, invoice.provider_order_id, evt.provider_order_id)
     event.status_api_verified = status is not None
     merchant = db.get(Merchant, invoice.merchant_id)
     checks = {

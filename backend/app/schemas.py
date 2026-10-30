@@ -226,6 +226,18 @@ class ConnectionOut(BaseModel):
     last_sync_at: datetime | None
 
 
+class WeekSales(BaseModel):
+    week_start: date
+    revenue: MoneyStr
+    packs: int
+
+
+class DuesBreakdown(BaseModel):
+    paid: MoneyStr
+    pending: MoneyStr
+    overdue: MoneyStr
+
+
 class DashboardOut(BaseModel):
     merchant: MerchantOut
     outstanding_dues: MoneyStr
@@ -235,9 +247,18 @@ class DashboardOut(BaseModel):
     in_progress: int
     last_week_sales: MoneyStr
     last_week_margin: MoneyStr
+    weekly_sales: list[WeekSales]
+    dues: DuesBreakdown
     brief: Brief
     connections: list[ConnectionOut]
     demo_mode: bool
+
+
+class ReadbackOut(BaseModel):
+    text: str
+    voice: Literal["LIVE", "OFF"]
+    audio_base64: str | None = None
+    mime: str | None = None
 
 
 class AssistantRequest(BaseModel):

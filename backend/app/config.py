@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     paytm_env: str = "demo"
     paytm_mid: str = "DEMOMID00000000000001"
     paytm_merchant_key: str | None = None
+    # Staging hosts from Paytm docs (Create Link API, Transaction Status API v3).
+    paytm_link_host: str = "https://securestage.paytmpayments.com"
+    paytm_status_host: str = "https://securegw-stage.paytmpayments.in"
+    paytm_timeout_s: float = 10.0
 
     # Sarvam (optional; text fallback when unset)
     sarvam_api_key: str | None = None

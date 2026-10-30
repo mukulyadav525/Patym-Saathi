@@ -4,10 +4,10 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Invoice, Product, SupplierQuote
+from app.models import Invoice, Product, SalesWeekly, SupplierQuote
 from app.services.restock import money
 from app.services.restock_flow import inventory_snapshot, sales_summary
 
@@ -43,6 +43,17 @@ def last_week_sales(db: Session, merchant_id: uuid.UUID) -> dict:
         if cheapest is not None:
             margin += (product.sell_price - cheapest) * packs
     return {"revenue": money(revenue), "gross_margin": money(margin)}
+
+
+def weekly_sales(db: Session, merchant_id: uuid.UUID) -> list[dict]:
+    """Revenue per week (sell price x packs sold) from the weekly sales records, oldest first."""
+    rows = db.execute(
+        select(SalesWeekly.week_start, func.sum(SalesWeekly.packs_sold * Product.sell_price), func.sum(SalesWeekly.packs_sold))
+        .join(Product, Product.id == SalesWeekly.product_id)
+        .where(SalesWeekly.merchant_id == merchant_id)
+        .group_by(SalesWeekly.week_start).order_by(SalesWeekly.week_start)
+    ).all()
+    return [{"week_start": w, "revenue": money(Decimal(r or 0)), "packs": int(p or 0)} for w, r, p in rows]
 
 
 def build(db: Session, merchant_id: uuid.UUID, today: date | None = None) -> dict:

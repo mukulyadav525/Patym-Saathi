@@ -188,6 +188,10 @@ def dashboard(db: Session, merchant: Merchant, demo_mode: bool) -> s.DashboardOu
         Invoice.merchant_id == mid, Invoice.status.in_(("PENDING", "DRAFTED", "APPROVED", "SENT")))).all()
     task_rows = tasks(db, mid)
     week = brief_service.last_week_sales(db, mid)
+    today = date.today()
+    paid = db.scalars(select(Invoice.amount).where(Invoice.merchant_id == mid, Invoice.status == "PAID")).all()
+    overdue = [i.amount for i in open_invoices if i.due_date < today]
+    pending = [i.amount for i in open_invoices if i.due_date >= today]
     return s.DashboardOut(
         merchant=merchant_out(merchant),
         outstanding_dues=m(sum((i.amount for i in open_invoices), Decimal("0"))),
@@ -196,6 +200,10 @@ def dashboard(db: Session, merchant: Merchant, demo_mode: bool) -> s.DashboardOu
         needs_approval=sum(1 for t in task_rows if t.group == "NEEDS_APPROVAL"),
         in_progress=sum(1 for t in task_rows if t.group == "IN_PROGRESS"),
         last_week_sales=m(week["revenue"]), last_week_margin=m(week["gross_margin"]),
+        weekly_sales=[s.WeekSales(week_start=w["week_start"], revenue=m(w["revenue"]), packs=w["packs"])
+                      for w in brief_service.weekly_sales(db, mid)],
+        dues=s.DuesBreakdown(paid=m(sum(paid, Decimal("0"))), pending=m(sum(pending, Decimal("0"))),
+                             overdue=m(sum(overdue, Decimal("0")))),
         brief=s.Brief(**brief_service.build(db, mid)), connections=connections(db, mid), demo_mode=demo_mode,
     )
 

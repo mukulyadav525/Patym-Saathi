@@ -64,3 +64,23 @@ def extract_intent(text: str) -> dict:
         return json.loads(match.group(0)) if match else {}
     except (httpx.HTTPError, ValueError, KeyError, IndexError):
         return {}
+
+
+def speak(text: str, language: str = "hi-IN") -> str:
+    """Bulbul text-to-speech. Returns base64 WAV. The text is built server-side from stored records."""
+    if not enabled():
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Voice read-back needs SARVAM_API_KEY on the server")
+    try:
+        resp = httpx.post(
+            f"{BASE}/text-to-speech",
+            headers=_headers(),
+            json={"text": text[:1500], "target_language_code": language, "model": get_settings().sarvam_tts_model},
+            timeout=TIMEOUT,
+        )
+        resp.raise_for_status()
+        audios = resp.json().get("audios") or []
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Read-back audio is unavailable right now") from exc
+    if not audios:
+        raise ApiError(503, "VOICE_UNAVAILABLE", "Read-back audio is unavailable right now")
+    return audios[0]

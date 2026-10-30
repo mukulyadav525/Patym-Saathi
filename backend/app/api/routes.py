@@ -12,7 +12,7 @@ from app.db import get_db
 from app.errors import ApiError
 from app.models import Invoice, MerchantMembership, Order, Task, User
 from app.security import Ctx, current_ctx, issue_token, verify_password
-from app.services import approvals, assistant, dues_flow, restock_flow, views
+from app.services import approvals, assistant, dues_flow, readback, restock_flow, views
 from app.services.common import move_task
 from app.tools import registry
 
@@ -87,6 +87,17 @@ async def assistant_voice(audio: UploadFile = File(...), language: str = Query("
         raise ApiError(413, "AUDIO_TOO_LARGE", "Recording too long; keep it under a minute")
     transcript = sarvam.transcribe(data, audio.filename or "audio.m4a", audio.content_type or "audio/mp4", language)
     return assistant.handle(db, ctx, s.AssistantRequest(text=transcript[:500]), channel="VOICE", transcript=transcript)
+
+
+@api.get("/tasks/{task_id}/readback", response_model=s.ReadbackOut)
+def task_readback(task_id: uuid.UUID, lang: str = Query("hi-IN", pattern="^(hi|en)-IN$"), audio: bool = False,
+                  ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.ReadbackOut:
+    text = readback.text_for(_task_or_404(db, ctx, task_id), lang)
+    if text is None:
+        raise ApiError(409, "NOTHING_TO_APPROVE", "This task has nothing waiting for approval")
+    if not audio or not sarvam.enabled():
+        return s.ReadbackOut(text=text, voice="LIVE" if sarvam.enabled() else "OFF")
+    return s.ReadbackOut(text=text, voice="LIVE", audio_base64=sarvam.speak(text, lang), mime="audio/wav")
 
 
 @api.get("/tasks", response_model=list[s.TaskSummary])

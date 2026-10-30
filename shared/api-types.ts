@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tasks/{task_id}/readback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Readback */
+        get: operations["task_readback_api_v1_tasks__task_id__readback_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks": {
         parameters: {
             query?: never;
@@ -593,11 +610,23 @@ export interface components {
             last_week_sales: string;
             /** Last Week Margin */
             last_week_margin: string;
+            /** Weekly Sales */
+            weekly_sales: components["schemas"]["WeekSales"][];
+            dues: components["schemas"]["DuesBreakdown"];
             brief: components["schemas"]["Brief"];
             /** Connections */
             connections: components["schemas"]["ConnectionOut"][];
             /** Demo Mode */
             demo_mode: boolean;
+        };
+        /** DuesBreakdown */
+        DuesBreakdown: {
+            /** Paid */
+            paid: string;
+            /** Pending */
+            pending: string;
+            /** Overdue */
+            overdue: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -832,6 +861,20 @@ export interface components {
              */
             created_at: string;
         };
+        /** ReadbackOut */
+        ReadbackOut: {
+            /** Text */
+            text: string;
+            /**
+             * Voice
+             * @enum {string}
+             */
+            voice: "LIVE" | "OFF";
+            /** Audio Base64 */
+            audio_base64?: string | null;
+            /** Mime */
+            mime?: string | null;
+        };
         /** SimpleResult */
         SimpleResult: {
             /** Ok */
@@ -976,6 +1019,18 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WeekSales */
+        WeekSales: {
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /** Revenue */
+            revenue: string;
+            /** Packs */
+            packs: number;
         };
     };
     responses: never;
@@ -1191,6 +1246,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssistantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_readback_api_v1_tasks__task_id__readback_get: {
+        parameters: {
+            query?: {
+                lang?: string;
+                audio?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadbackOut"];
                 };
             };
             /** @description Validation Error */
