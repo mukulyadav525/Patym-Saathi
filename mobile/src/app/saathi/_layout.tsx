@@ -46,7 +46,7 @@ export default function TabsLayout() {
               <Pressable
                 style={s.mic}
                 accessibilityLabel="Speak to Saathi"
-                onPress={() => router.navigate({ pathname: "/assistant", params: { listen: String(Date.now()) } })}
+                onPress={() => router.navigate({ pathname: "/saathi/assistant", params: { listen: String(Date.now()) } })}
               >
                 <Ionicons name="mic" size={26} color="#fff" />
               </Pressable>

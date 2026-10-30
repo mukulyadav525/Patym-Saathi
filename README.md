@@ -79,7 +79,8 @@ Auth is backend-issued JWT (HS256); `SUPABASE_JWT_SECRET` is also accepted if yo
 
 ## Demo script (≈4 min)
 
-1. **Reset** (Business tab → Reset demo data, or web → Connections).
+1. **Reset** (Saathi → Business tab → Reset demo data, or web → Connections).
+   The app opens on the Paytm for Business home; tap the **NEW Paytm Saathi** tile to sign in.
 2. **Home**: dues ₹1,850, 5 low-stock items, 3 cited priorities.
 3. **Saathi**: tap "Plan stock for weekend" → ₹4,650 plan → *Review & approve* → evidence (4-week sales, stock, quotes).
 4. Approve ₹4,650 → **Supplier A: sunflower oil out of stock** → plan v2 ₹4,850 (+₹200, Metro Wholesale) → old approval superseded.

@@ -12,6 +12,7 @@ const LINKS: { label: string; sub: string; icon: IconName; tone: Tone; href: Hre
   { label: "Daily report", sub: "3 priorities from your records", icon: "bar-chart-outline", tone: "violet", href: "/brief" },
   { label: "Stock & alerts", sub: "Inventory, low-stock items", icon: "layers-outline", tone: "green", href: "/inventory" },
   { label: "Dues collection", sub: "Open invoices and payment links", icon: "wallet-outline", tone: "cyan", href: "/dues" },
+  { label: "Payments and settlements", sub: "Money received via payment links", icon: "cash-outline", tone: "green", href: "/settlements" },
   { label: "Order history", sub: "Supplier orders and status", icon: "cart-outline", tone: "amber", href: "/orders" },
   { label: "Activity history", sub: "Every plan, approval and API call", icon: "time-outline", tone: "navy", href: "/activity" },
   { label: "Connections & consent", sub: "What's live, demo or simulated", icon: "git-network-outline", tone: "muted", href: "/connections" },

@@ -11,7 +11,7 @@ import { colors, radius, type Tone } from "@/lib/theme";
 
 const ACTIONS: { label: string; icon: IconName; tone: Tone; go: () => void }[] = [
   { label: "Collect", icon: "qr-code-outline", tone: "cyan", go: () => router.push("/dues") },
-  { label: "Restock", icon: "cube-outline", tone: "amber", go: () => router.navigate({ pathname: "/assistant", params: { prompt: "restock" } }) },
+  { label: "Restock", icon: "cube-outline", tone: "amber", go: () => router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } }) },
   { label: "Stock", icon: "layers-outline", tone: "green", go: () => router.push("/inventory") },
   { label: "Reports", icon: "bar-chart-outline", tone: "violet", go: () => router.push("/brief") },
 ];
@@ -24,6 +24,12 @@ export default function Home() {
   return (
     <Screen refreshing={refreshing} onRefresh={reload}>
       <Row style={{ paddingVertical: 10 }}>
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+          hitSlop={10} style={{ marginRight: 6 }} accessibilityLabel="Back to Paytm for Business"
+        >
+          <Ionicons name="arrow-back" size={22} color={colors.navy} />
+        </Pressable>
         <View style={{ flex: 1 }}>
           <Brand />
         </View>
@@ -31,9 +37,9 @@ export default function Home() {
           <View style={s.dot} />
           <Txt style={s.demoPillText}>{data?.demo_mode ? "DEMO" : "LIVE"}</Txt>
         </Pressable>
-        <View style={s.avatar}>
+        <Pressable onPress={() => router.push("/profile")} style={s.avatar} accessibilityLabel="Profile and settings" hitSlop={6}>
           <Txt style={{ color: colors.navy, fontWeight: "800" }}>{first.charAt(0)}</Txt>
-        </View>
+        </Pressable>
       </Row>
 
       <Txt style={ui.h1}>Namaste, {first} 👋</Txt>
@@ -68,7 +74,7 @@ export default function Home() {
           </Row>
 
           {data.needs_approval > 0 && (
-            <Card onPress={() => router.navigate("/tasks")} style={s.approve}>
+            <Card onPress={() => router.navigate("/saathi/tasks")} style={s.approve}>
               <Row>
                 <IconTile icon="shield-checkmark" tone="amber" />
                 <View style={{ flex: 1, marginLeft: 12 }}>

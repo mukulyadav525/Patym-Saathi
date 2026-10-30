@@ -68,7 +68,7 @@ export function TopBar({ title, back = true, right }: { title?: string; back?: b
   return (
     <View style={styles.topbar}>
       {back ? (
-        <Pressable hitSlop={12} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={styles.iconBtn} accessibilityLabel="Back">
+        <Pressable hitSlop={12} onPress={() => (router.canGoBack() ? router.back() : router.replace("/saathi"))} style={styles.iconBtn} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={22} color={colors.navy} />
         </Pressable>
       ) : (

@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Redirect, router, useLocalSearchParams, type Href } from "expo-router";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, TextInput, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Brand, Button, Card, Txt, styles as ui } from "@/components/ui";
@@ -9,7 +10,8 @@ import { useAuth } from "@/lib/auth";
 import { colors, radius } from "@/lib/theme";
 
 export default function SignIn() {
-  const { signIn } = useAuth();
+  const { signIn, session } = useAuth();
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const [email, setEmail] = useState("owner@sharma.demo");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -27,8 +29,17 @@ export default function SignIn() {
     }
   };
 
+  // Once signed in, continue where the user was heading (Saathi by default).
+  if (session) return <Redirect href={(next?.startsWith("/") ? next : "/saathi") as Href} />;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Pressable
+        onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))}
+        style={s.back} hitSlop={12} accessibilityLabel="Back to Paytm for Business"
+      >
+        <Ionicons name="arrow-back" size={24} color={colors.navy} />
+      </Pressable>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.wrap}>
         <View style={s.hero}>
           <View style={s.logo}>
@@ -67,6 +78,7 @@ export default function SignIn() {
 }
 
 const s = StyleSheet.create({
+  back: { width: 44, height: 44, marginLeft: 8, marginTop: 4, alignItems: "center", justifyContent: "center" },
   wrap: { flex: 1, justifyContent: "center", padding: 20 },
   hero: { alignItems: "center", marginBottom: 24 },
   logo: { width: 64, height: 64, borderRadius: 20, backgroundColor: colors.cyan, alignItems: "center", justifyContent: "center", marginBottom: 14 },

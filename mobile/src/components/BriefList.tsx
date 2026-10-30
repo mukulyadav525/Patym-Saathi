@@ -19,7 +19,7 @@ export function BriefList({ brief, compact }: { brief: Brief; compact?: boolean 
   const act = async (p: Brief["priorities"][number]) => {
     if (!p.action) return;
     if (p.action.type === "RESTOCK") {
-      router.navigate({ pathname: "/assistant", params: { prompt: "restock" } });
+      router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } });
       return;
     }
     if (p.action.type === "COLLECT" && p.action.invoice_id) {
