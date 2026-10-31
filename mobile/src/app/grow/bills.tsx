@@ -3,9 +3,10 @@ import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, TextInput, View } from "react-native";
 
+import { AddProductForm } from "@/components/AddProductForm";
 import { SourceNote } from "@/components/grow";
 import { Badge, Button, Card, Row, Screen, SectionTitle, StateBadge, TopBar, Txt, styles as ui } from "@/components/ui";
-import { api, ApiError, type Receipt } from "@/lib/api";
+import { api, ApiError, type Receipt, type S } from "@/lib/api";
 import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
 
@@ -20,9 +21,13 @@ export default function BillsScreen() {
   const [busy, setBusy] = useState<string | null>(null);
   const [draft, setDraft] = useState<Receipt | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
+  const [newItems, setNewItems] = useState<S["NewBillItem"][]>([]);
+  const [adding, setAdding] = useState<S["NewBillItem"] | null>(null);
 
   const load = (r: Receipt) => {
     setDraft(r);
+    setNewItems(r.new_items ?? []);
+    setAdding(null);
     setLines(r.lines.map((l) => ({ product_id: l.product_id, name: l.name, pack_label: l.pack_label, packs: l.packs, unit_price: l.unit_price })));
   };
 
@@ -156,14 +161,41 @@ export default function BillsScreen() {
                 </Pressable>
               </Row>
             ))}
-            {draft.unmatched.length > 0 && (
+            {newItems.length > 0 && !adding && (
               <View style={s.unmatched}>
-                <Txt style={{ fontWeight: "700", fontSize: 12, color: colors.amber }}>Not recognised (ignored):</Txt>
-                {draft.unmatched.map((u, i) => <Txt key={i} style={{ fontSize: 12, color: colors.inkSoft }} numberOfLines={1}>• {u}</Txt>)}
+                <Txt style={{ fontWeight: "700", fontSize: 12, color: colors.amber }}>New on this bill: not in your inventory yet</Txt>
+                {newItems.map((n) => (
+                  <Row key={n.source_text} style={{ paddingVertical: 6 }}>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Txt style={{ fontWeight: "700" }} numberOfLines={1}>{n.name || n.source_text}</Txt>
+                      <Txt style={[ui.muted, { fontSize: 12 }]} numberOfLines={1}>
+                        {n.pack_label} · {plural(n.packs, "pack")}{n.unit_price ? ` · ${rupees(n.unit_price)} each` : ""}
+                      </Txt>
+                    </View>
+                    <Button label="Add" icon="add-circle-outline" small kind="secondary" onPress={() => setAdding(n)} />
+                  </Row>
+                ))}
               </View>
             )}
             {draft.bill_total && <SourceNote text={`Bill printed total ${rupees(draft.bill_total)} · lines read ${rupees(draft.total)}`} />}
           </Card>
+          {adding && draft && (
+            <AddProductForm submitLabel="Add item and put it on the bill" stockLabel="Packs on this bill"
+              note="Set your selling price. Stock and cost price arrive when you confirm this bill."
+              initial={{ name: adding.name, pack_label: adding.pack_label, cost_price: adding.unit_price ? String(Number(adding.unit_price)) : "",
+                sell_price: adding.suggested_sell_price ? String(Number(adding.suggested_sell_price)) : "", stock: String(adding.packs) }}
+              onCancel={() => setAdding(null)}
+              onSubmit={async (d) => {
+                const r = await api.billNewItem(draft.id, { name: d.name.trim(), name_hi: d.name_hi.trim() || null,
+                  pack_label: d.pack_label.trim() || "1 pack", sell_price: d.sell_price, packs: Math.max(1, Number(d.stock || 1)),
+                  unit_price: d.cost_price || null });
+                const line = r.lines[r.lines.length - 1];
+                setLines((cur) => [...cur, { product_id: line.product_id, name: line.name, pack_label: line.pack_label, packs: line.packs, unit_price: line.unit_price }]);
+                setNewItems((cur) => cur.filter((x) => x.source_text !== adding.source_text));
+                setDraft(r);
+                setAdding(null);
+              }} />
+          )}
           <Button label={`Add ${plural(totalPacks, "pack")} to stock`} icon="checkmark-circle" loading={busy === "confirm"} disabled={lines.length === 0} onPress={() => void confirm()} />
           <Button label="Discard" kind="ghost" onPress={() => void discard()} style={{ marginTop: 4 }} />
         </>

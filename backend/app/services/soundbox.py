@@ -49,8 +49,8 @@ from app.security import Ctx
 from app.services import answers, audit, live, profit
 from app.services.bills import ALIASES
 
-PENDING_TTL = timedelta(minutes=2)        # an unanswered question expires
-QR_MATCH_WINDOW = timedelta(minutes=3)    # "paise diye" links a QR payment that just arrived
+PENDING_TTL = timedelta(minutes=10)       # an unanswered question expires (customers take time to scan or count cash)
+QR_MATCH_WINDOW = timedelta(minutes=5)    # "paise diye" links a QR payment that just arrived
 AWAIT_WINDOW = timedelta(minutes=15)      # a UPI sale waits this long for its payment to arrive
 UNDO_WINDOW = timedelta(minutes=30)
 MAX_PACKS = 100
@@ -74,9 +74,9 @@ UNIT_WORDS = {"kilo": "kg", "kg": "kg", "kgs": "kg", "kilogram": "kg", "gram": "
               "packets": "pack", "pack": "pack", "packs": "pack", "bag": "pack", "bori": "pack", "piece": "piece",
               "pieces": "piece", "dabba": "pack", "botal": "pack", "bottle": "pack"}
 
-UDHAAR_RE = re.compile(r"\b(udhaa?r|khate|khata|khaate|likh\s*(do|lo|dena|diya)?|baad\s+mein|credit)\b", re.I)
-CASH_RE = re.compile(r"\b(cash|nakad|nagad|naqad|haath\s+mein|chhutta)\b", re.I)
-UPI_RE = re.compile(r"\b(upi|paytm|online|scan|qr|gpay|phonepe|phone\s*pe)\b", re.I)
+UDHAAR_RE = re.compile(r"\b(udh?aa?r\w*|udhar\w*|khate|khata|khaate|likh\s*(do|lo|dena|diya)?|baad\s+mein|credit)\b", re.I)
+CASH_RE = re.compile(r"\b(cash|kash|kesh|nakad|nagad|naqad|haath\s+mein|chhutta)\b", re.I)
+UPI_RE = re.compile(r"\b(upi|paytm|pay\s*tm|online|scan|qr|q\s*r|queue\s*r|gpay|phonepe|phone\s*pe)\b", re.I)
 PAID_RE = re.compile(r"\b(paise?\s+(de\s+)?diye|paisa\s+(de\s+)?diya|de\s+diye|paid|pay\s+kar\s+diya|chuka\s+diya|mil\s+gaye)\b", re.I)
 YES_RE = re.compile(r"\b(haan|haa|ha|han|ji|yes|haanji|theek|thik|ok|okay|bilkul|kholo|khol\s+do|zaroor|sahi)\b", re.I)
 NO_RE = re.compile(r"\b(nahi|nahin|na|no|mat)\b", re.I)
@@ -87,6 +87,8 @@ NOT_NAMES = {"maine", "usne", "isne", "unhone", "inhone", "humne", "aapne", "tum
              "unko", "isko", "usko", "mujhko", "humko", "aapko", "customer", "grahak", "bhai", "didi", "uncle", "aunty"}
 ORDINALS = {"pehla": 0, "pehle": 0, "first": 0, "ek": 0, "doosra": 1, "dusra": 1, "doosre": 1, "second": 1,
             "teesra": 2, "tisra": 2, "third": 2}
+WEIGHT_SAID = re.compile(r"\d\s*(kg|g|gm|ml|l)\b|\b(kilo|kilos|kg|gram|grams|gm|litre|liter|ltr|ml|kgs)\b", re.I)
+BRIEF_RE = re.compile(r"\b(brief|zaroori|zaruri|important|priorit\w*|aaj\s+kya\s+karna)\b", re.I)
 PACK_MEASURE = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|g|gm|l|ltr|ml)\b", re.I)
 BASE = {"kg": ("g", 1000), "g": ("g", 1), "gm": ("g", 1), "litre": ("ml", 1000), "l": ("ml", 1000), "ltr": ("ml", 1000),
         "ml": ("ml", 1)}
@@ -302,6 +304,11 @@ def parse(command: str, products: list[Product], customers: list[str]) -> Parsed
     # How the customer paid decides which book an entry goes into, so it comes only from words actually said
     # ("udhaar", "cash", "UPI", "paise de diye"). The model tends to fill a guess in; a guess asks instead.
     parsed.payment = _payment_from_words(command)
+    # A weight only counts if one was said: "atta wapas kiya" is one bag, not "1 kg".
+    if not WEIGHT_SAID.search(command):
+        for item in parsed.items:
+            if item.unit in BASE and item.quantity == 1:
+                item.unit = "pack"
     # A quantity said in words before the item ("teen atta") wins: the model sometimes reads Hindi numbers as 1.
     heard = {i.said: i for i in _rules_parse(command, products, customers).items if (i.quantity, i.unit) != (1, "pack")}
     for item in parsed.items:
@@ -448,9 +455,11 @@ def _items_text(lines: list[dict], spoken: bool = False) -> str:
     def name(ln: dict) -> str:
         return SPOKEN.get(ln.get("sku", ""), ln["name"]).capitalize() if spoken else ln["name"]
 
-    def unit(ln: dict) -> str:
-        return "bag" if "bag" in ln.get("pack_label", "") else "pack"
-    return ", ".join(f"{name(ln)} {ln['packs']} {unit(ln)}" for ln in lines)
+    return ", ".join(f"{name(ln)} {ln['packs']} {_unit_word(ln)}" for ln in lines)
+
+
+def _unit_word(ln: dict) -> str:
+    return "bag" if "bag" in ln.get("pack_label", "") else "pack"
 
 
 TOTAL_Q = re.compile(r"\b(kitne|kitna|kitni|total|kul|bill)\b.*\b(hua|hue|hui|ho\s*gaya|ho\s*gaye|bana|bane|rupaye|rupees|paise|ka|ke)\b"
@@ -550,6 +559,8 @@ def _handle(db: Session, ctx: Ctx, text_: str, *, followup: bool = False, heard:
         reply = undo(db, ctx, last)
         return _result("CANCELLED", reply, heard=heard, command=command, sale=last, by=parsed.by)
 
+    if parsed.intent == "QUESTION" and BRIEF_RE.search(command):
+        return _assistant(db, ctx, command, heard, parsed.by)  # the day's brief, computed from records
     if parsed.intent == "QUESTION":
         quick = answers.quick_answer(db, ctx, command)
         reply = quick[0] if quick else answers.llm_answer(db, ctx, command)
@@ -890,11 +901,11 @@ def _record(db: Session, ctx: Ctx, sale: CounterSale, mode: str, status: str, qr
                 take = min(ln["packs"], inv.on_hand_packs)
                 inv.on_hand_packs -= take
                 if take < ln["packs"]:
-                    notes.append(f"record mein {SPOKEN.get(ln.get('sku', ''), ln['name'])} sirf {take} pack tha, stock check karein")
+                    notes.append(f"record mein {SPOKEN.get(ln.get('sku', ''), ln['name'])} sirf {take} {_unit_word(ln)} tha, stock check karein")
                 elif inv.usable_packs == 0:
                     notes.append(f"{SPOKEN.get(ln.get('sku', ''), ln['name'])} khatam ho gaya, restock karein")
                 elif inv.usable_packs <= 2:
-                    notes.append(f"{SPOKEN.get(ln.get('sku', ''), ln['name'])} ab sirf {inv.usable_packs} pack bacha hai")
+                    notes.append(f"{SPOKEN.get(ln.get('sku', ''), ln['name'])} ab sirf {inv.usable_packs} {_unit_word(ln)} bacha hai")
                 applied["stock"].append({"product_id": ln["product_id"], "delta": -take})
             else:
                 inv.on_hand_packs += ln["packs"]

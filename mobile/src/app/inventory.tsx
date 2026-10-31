@@ -14,6 +14,8 @@ export default function InventoryScreen() {
   return (
     <Screen refreshing={refreshing} onRefresh={() => { reload(); profit.reload(); }}>
       <TopBar title="Stock & alerts" />
+      <Button label="Add a product" icon="add-circle-outline" kind="secondary" small style={{ marginBottom: 12 }}
+        onPress={() => router.push("/add-product")} />
       {loading && !data ? <Loading /> : error && !data ? <ErrorState error={error} onRetry={reload} /> : !data?.length ? (
         <Empty icon="layers-outline" title="No stock records" body="Connect POS or add items to see stock." />
       ) : (
@@ -60,7 +62,7 @@ export default function InventoryScreen() {
                 <Row style={{ gap: 6, marginTop: 6 }}>
                   {i.low && <Badge label="Low" tone="red" icon="warning-outline" />}
                   <Badge label={i.source} tone={i.source === "SAMPLE" ? "violet" : "green"} />
-                  <Txt style={[ui.muted, { fontSize: 11, flex: 1 }]}>updated {timeAgo(i.updated_at)}</Txt>
+                  <Txt style={[ui.muted, { fontSize: 11, flex: 1 }]} numberOfLines={1}>{timeAgo(i.updated_at)}</Txt>
                   <Txt style={{ fontSize: 12, fontWeight: "700", color: colors.navy }}>Compare vendors ›</Txt>
                 </Row>
                 </Pressable>

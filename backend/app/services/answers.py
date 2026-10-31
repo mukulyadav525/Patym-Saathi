@@ -166,15 +166,16 @@ def loan_answer(db: Session, merchant_id) -> str:
 
 
 def shortage_answer(snapshot: list, sales: dict) -> tuple[str, list[str]]:
-    """What is running short: less than a week of stock at the usual sales, out-of-stock first."""
+    """What is running short, by the same rule as the dashboard and the app (below half a week's usual sales),
+    out-of-stock first."""
     short = []
     for p, inv in snapshot:
         weeks = sales.get(str(p.id), {}).get("weeks", [])
         avg = Decimal(sum(weeks)) / len(weeks) if weeks else Decimal("0")
-        if avg > 0 and inv.usable_packs < avg:
+        if avg > 0 and inv.usable_packs < avg * brief_service.LOW_STOCK_RATIO:
             short.append((inv.usable_packs, p.name, avg))
     if not short:
-        return "Sab items mein kam se kam ek hafte ka stock hai.", []
+        return "Kisi item ka stock kam nahi hai: sab mein aadhe hafte se zyada ka maal hai.", []
     short.sort()
     parts = [f"{name} {'khatam' if left == 0 else f'{left} bacha'} (hafte mein ~{avg:.0f} bikta)" for left, name, avg in short[:5]]
     more = f" aur {len(short) - len(parts)} aur" if len(short) > len(parts) else ""

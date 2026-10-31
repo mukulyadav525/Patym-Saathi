@@ -78,7 +78,7 @@ export default function Inventory() {
                       <b>{i.name}</b> <span className="text-muted">{i.name_hi}</span>
                       {i.brand && <p className="text-xs text-ink-soft">{i.brand}</p>}
                     </td>
-                    <td>{i.pack_label}</td>
+                    <td className="whitespace-nowrap pr-3">{i.pack_label}</td>
                     <td className="text-right">
                       <span className="inline-flex items-center justify-end gap-2">
                         {i.low && <Badge tone="red">Low</Badge>}

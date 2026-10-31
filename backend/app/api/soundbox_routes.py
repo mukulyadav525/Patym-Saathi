@@ -3,6 +3,7 @@ dashboard and the Soundbox follow. Speech-to-text, understanding and the spoken 
 the Sarvam key never reaches a client."""
 
 import asyncio
+import re
 import time
 import uuid
 
@@ -28,7 +29,8 @@ def _result_out(result: dict, speak: bool) -> s.SoundboxResult:
     sale = result.pop("sale")
     out = s.SoundboxResult(**result, sale=s.CounterSaleOut(**soundbox.sale_dict(sale)) if sale else None)
     if speak and out.reply and out.action != "IGNORED" and sarvam.enabled():
-        out.speech = sarvam.to_devanagari(out.reply)
+        # Spoken without bracketed details (availability, notes): shorter to say, and the screen shows them.
+        out.speech = sarvam.to_devanagari(re.sub(r"\s*\([^)]*\)", "", out.reply))
         try:
             out.audio = sarvam.speak(out.speech)
         except ApiError:

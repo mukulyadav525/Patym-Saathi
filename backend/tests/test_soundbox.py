@@ -182,7 +182,7 @@ def test_undo_button_and_isolation(client, auth):
 
 def test_sale_beyond_recorded_stock_is_flagged(client, auth):
     r = say(client, auth, "Saathi, teen atta liye Mukul ne cash")  # only 2 in stock
-    assert r["action"] == "RECORDED" and "sirf 2 pack tha" in r["reply"] and stock("ATTA10") == 0
+    assert r["action"] == "RECORDED" and "sirf 2 bag tha" in r["reply"] and stock("ATTA10") == 0
 
 
 def test_live_feed_cursor_and_events(client, auth):
@@ -394,3 +394,34 @@ def test_restock_and_brief_through_the_soundbox(client, auth):
     assert r["action"] == "ANSWERED" and r["task_id"] and "Approve dabaiye" in r["reply"]
     r = say(client, auth, "Saathi, aaj ka brief batao")
     assert r["action"] == "ANSWERED" and "1." in r["reply"]
+
+
+@pytest.mark.parametrize("heard", ["Saath hi, Mukul ne ek chawal liya udhaaran hai", "Saathi Mukul ne chawal liya udhar me"])
+def test_udhaar_as_speech_to_text_writes_it(client, auth, heard):
+    r = say(client, auth, heard)
+    assert r["action"] == "RECORDED" and r["sale"]["payment_mode"] == "UDHAAR"
+
+
+def test_model_weight_without_spoken_weight_is_a_bag(client, auth, monkeypatch):
+    _fake_llm(monkeypatch, {"intent": "RETURN", "customer": "Mukul", "payment": "UNSPECIFIED", "amount": None,
+                            "items": [{"product": "Atta", "quantity": 1, "unit": "kg"}]})
+    r = say(client, auth, "Saathi, Mukul ne aata vapas kiya")
+    assert [ln["sku"] for ln in r["sale"]["lines"]] == ["ATTA10"] and "kg ke liye" not in r["reply"]
+
+
+def test_brief_by_voice_is_the_computed_brief(client, auth):
+    r = say(client, auth, "Saathi, aaj ka brief batao")
+    assert r["action"] == "ANSWERED" and "1." in r["reply"]
+
+
+def test_bill_still_open_after_a_few_minutes(client, auth):
+    from datetime import timedelta
+
+    from app.models import CounterSale
+    say(client, auth, "Saathi, Garv ne 5 kilo atta khareeda")
+    with SessionLocal() as db:
+        sale = db.scalars(select(CounterSale).where(CounterSale.status == "PENDING")).one()
+        sale.created_at -= timedelta(minutes=6)
+        db.commit()
+    r = say(client, auth, "Saathi, cash diya")
+    assert r["action"] == "RECORDED" and r["sale"]["customer_name"] == "Garv"
