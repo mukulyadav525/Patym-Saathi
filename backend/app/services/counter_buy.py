@@ -32,7 +32,7 @@ from app.services.soundbox import (
     resolve_item,
 )
 
-BUY_RE = re.compile(r"\b(khar[ei]+dna|khar[ei]+d\s+(do|lo|dena|lena)|mangwa\w*|mangana|mangao|manga\s+do|"
+BUY_RE = re.compile(r"\b(khar[ei]+d(na|ni|ne)|khar[ei]+d\s+(do|lo|dena|lena)|mangwa\w*|mangana|mangao|manga\s+do|"
                     r"order\s+(karo|karna|kar\s+do|dena|de\s+do|lagao)|stock\s+(chahiye|lana|mangao|bharna)|"
                     r"lana\s+hai|lena\s+hai|chahiye|buy|purchase)\b", re.I)
 SELF_RE = re.compile(r"\b(mujhe|mujhko|humein|hume|hamein|hamko|dukaan|shop|store|apne\s+liye)\b", re.I)
@@ -174,7 +174,7 @@ def answers(sale: CounterSale, said: str) -> bool:
     if sale.question == "BUY_BUDGET":
         return bool(rupees_in(low))
     if sale.question == "BUY_VENDOR":
-        return _pick(sale, low) is not None
+        return _pick(sale, low) is not None or any(n >= 100 for n in rupees_in(low))
     return sale.question == "BUY_ITEM"
 
 
@@ -247,6 +247,10 @@ def answer(db: Session, ctx: Ctx, sale: CounterSale, said: str, heard: str, prod
         return _offer_question(db, ctx, sale, product, applied.get("packs"), max(amounts), heard, said)
 
     # BUY_VENDOR
+    new_budget = [n for n in rupees_in(low) if n >= 100]
+    if new_budget and _pick(sale, low) is None:
+        # "5000" here changes the budget; it never picks a vendor.
+        return _offer_question(db, ctx, sale, product, None, max(new_budget), heard, said)
     if APPROVE_RE.search(low) and _pick(sale, low) is None:
         db.commit()
         return _result("ASKED", "Pehle vendor chuniye. Approve aap app ya dashboard par tap karke karenge.", heard=heard,
@@ -258,7 +262,7 @@ def answer(db: Session, ctx: Ctx, sale: CounterSale, said: str, heard: str, prod
         db.commit()
         return _result("ASKED", f"{same_supplier[0]['supplier']} ke paas {len(same_supplier)} hain: {choices}. Kaunsa?",
                        heard=heard, command=said, sale=sale, expects_reply=True)
-    offer = offer or _llm_pick(sale, said)
+    offer = offer or (_llm_pick(sale, said) if re.search(r"[a-z]{3,}", low) else None)
     if offer is None:
         names = " ya ".join(o["supplier"] for o in applied.get("offers", []))
         db.commit()

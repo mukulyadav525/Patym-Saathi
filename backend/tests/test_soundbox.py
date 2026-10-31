@@ -43,6 +43,8 @@ def khata(name, source="SOUNDBOX"):
     ("Bhaiya saathi log aaye", None),
     ("Saath hi, Priya ne chai patti li", "Priya ne chai patti li"),  # how Saaras often writes "Saathi"
     ("Sarthi atta liya", "atta liya"),
+    ("He saathi, Garv ne paanch kilo aata khareeda hai.", "Garv ne paanch kilo aata khareeda hai"),
+    ("Arre Saathi atta liya", "atta liya"),
 ])
 def test_wake_word(heard, command):
     assert soundbox.split_wake(heard) == command
@@ -425,3 +427,20 @@ def test_bill_still_open_after_a_few_minutes(client, auth):
         db.commit()
     r = say(client, auth, "Saathi, cash diya")
     assert r["action"] == "RECORDED" and r["sale"]["customer_name"] == "Garv"
+
+
+def test_buy_without_quantity_asks_budget_and_a_number_never_picks_a_vendor(client, auth, monkeypatch):
+    _fake_llm(monkeypatch, {"intent": "BUY", "customer": None, "payment": "UNSPECIFIED", "amount": None, "budget": None,
+                            "items": [{"product": "Sugar", "quantity": 1, "unit": "kg"}]})
+    r = say(client, auth, "Saathi, mujhe cheeni kharidni hai")
+    assert r["sale"]["question"] == "BUY_BUDGET"
+    r = say(client, auth, "1000", followup=True)
+    assert r["sale"]["question"] == "BUY_VENDOR"
+    r = say(client, auth, "5000", followup=True)  # a new budget at the vendor question
+    assert r["action"] == "ASKED" and r["sale"]["question"] == "BUY_VENDOR" and "₹2,000" in r["reply"]
+
+
+def test_mangled_cash_answer_still_counts(client, auth):
+    say(client, auth, "Saathi, Priya ne do kilo cheeni li")
+    r = say(client, auth, "Kashmiriya", followup=True)
+    assert r["action"] == "RECORDED" and r["sale"]["payment_mode"] == "CASH"

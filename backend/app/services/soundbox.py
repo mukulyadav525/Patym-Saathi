@@ -59,7 +59,9 @@ MAX_AMOUNT = Decimal("100000")
 # How speech-to-text writes "Saathi": Saaras often splits it ("Saath hi"), and people also say "Sarthi".
 WAKE_NAMES = (r"saathi\s*ji", r"sathi\s*ji", r"saath\s+hi", r"sath\s+hi", "saathi", "sathi", "saathee", "sathee", "saathy",
               "sathy", "saathe", "saati", "saarthi", "sarthi", "sarathi", "साथी", "साथि", "सारथी", r"साथ\s?ही")
-WAKE = re.compile(r"(?:^|[\s,.!?।])(?:(?:hey|hi|hello|ok|okay|haan|ha|ji|हे|हाय)[\s,]+)?"
+# Greetings speech-to-text puts before the name ("He saathi", "Arre saathi", "Suno saathi").
+WAKE = re.compile(r"(?:^|[\s,.!?।])(?:(?:hey|he|hay|hai|hi|hello|ae|aye|ay|ok|okay|haan|ha|ji|arre|are|oye|suno|sun|"
+                  r"हे|हाय|अरे|सुनो)[\s,.!]+)?"
                   r"(" + "|".join(WAKE_NAMES) + r")(?=[\s,.!?:।-]|$)", re.I)
 
 NUMBER_WORDS = {"ek": 1, "one": 1, "do": 2, "two": 2, "teen": 3, "tin": 3, "three": 3, "char": 4, "chaar": 4,
@@ -755,6 +757,11 @@ def _answer_kind(sale: CounterSale, said: str) -> str | None:
         p = _payment_from_words(low)
         if p != "UNSPECIFIED":
             return p
+        # Right after "cash, QR ya udhaar?", speech-to-text mangles short answers ("cash mein" -> "Kashmiriya").
+        if re.match(r"\W*(cash|kash|kesh|kaish|cas)", low):
+            return "CASH"
+        if re.match(r"\W*(udh|udaa|udha)", low):
+            return "UDHAAR"
         if q == "PAYMENT" and YES_RE.search(low) and re.search(r"\b(diye|diya|de)\b", low):
             return "PAID"
         return None
