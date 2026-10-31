@@ -1,26 +1,33 @@
 # Render blueprint for the API. Set secrets in the Render dashboard, never here.
+# Region: Singapore, next to a Supabase project in ap-southeast-1 (keep the API and the database together).
 services:
   - type: web
     name: paytm-saathi-api
     runtime: docker
     rootDir: backend
+    region: singapore
+    plan: starter            # free also works, but it sleeps after 15 min idle (first request then takes ~50 s)
     healthCheckPath: /health
     envVars:
-      - key: DATABASE_URL        # Supabase connection string (postgresql+psycopg://…), sslmode=require
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL        # Supabase SESSION pooler: postgresql+psycopg://postgres.<ref>:<pw>@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres?sslmode=require
         sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: DEMO_WEBHOOK_KEY
         generateValue: true
-      - key: DEMO_PASSWORD
+      - key: DEMO_PASSWORD       # the password for the demo login (not the public default)
         sync: false
-      - key: CORS_ORIGINS        # e.g. https://paytm-saathi.vercel.app
-        sync: false
+      - key: CORS_ORIGINS        # only needed if a browser calls the API directly; the Vercel site goes through its own /api/v1
+        value: http://localhost:3000
       - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_SHORTAGE
         value: "true"
       - key: PAYTM_ENV
         value: demo
-      - key: SEED_ON_BOOT
-        value: "false"
+      - key: SEED_ON_BOOT        # loads the demo shop once, into an empty database only
+        value: "true"
       - key: SARVAM_API_KEY
         sync: false

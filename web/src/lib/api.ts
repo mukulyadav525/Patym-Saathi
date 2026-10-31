@@ -125,7 +125,7 @@ export const api = {
   soundboxPay: (amount: string, payer = "", saleId?: string) =>
     request<S["QrPaymentOut"]>("POST", "/api/v1/soundbox/qr-payments", { amount, payer, sale_id: saleId ?? null }),
   announcement: (eventId: number) => request<S["AudioOut"]>("GET", `/api/v1/soundbox/announcements/${eventId}`, undefined, {}, SLOW_MS),
-  live: (after: number | null, wait = 25) =>
+  live: (after: number | null, wait = 20) =>
     request<S["LiveOut"]>("GET", `/api/v1/live?wait=${wait}${after == null ? "" : `&after=${after}`}`, undefined, {}, (wait + 10) * 1000),
   payInfo: (token: string, bill?: string | null) =>
     request<S["PayPageInfo"]>("GET", `/api/v1/pay/${token}${bill ? `?bill=${encodeURIComponent(bill)}` : ""}`),

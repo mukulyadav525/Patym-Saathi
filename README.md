@@ -129,10 +129,8 @@ Auth is backend-issued JWT (HS256) only. Supabase is used as the Postgres databa
 
 ## Deploy
 
-* API: `render.yaml` (Docker, `backend/Dockerfile`). Set `DATABASE_URL`, `CORS_ORIGINS`, `DEMO_PASSWORD`, `APP_ENV=production`.
-  Startup refuses default secrets outside development. Warm `/health` before demoing (free tiers sleep).
-* Web: Vercel, root `web/`, env `NEXT_PUBLIC_API_BASE_URL=https://<api>`.
-* Secrets stay on the API. Nothing secret goes in `NEXT_PUBLIC_*` / `EXPO_PUBLIC_*`.
+Supabase (database) + Render (API, `render.yaml`) + Vercel (website, root `web/`, env `API_ORIGIN`) + EAS (APK).
+Step by step: [docs/DEPLOY.md](docs/DEPLOY.md). Secrets stay on the API; nothing secret goes in `NEXT_PUBLIC_*` / `EXPO_PUBLIC_*`.
 
 ## Demo script (≈4 min)
 

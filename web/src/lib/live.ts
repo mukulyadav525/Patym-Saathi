@@ -25,7 +25,7 @@ async function loop(mine: number) {
   let backoff = 1000;
   while (mine === generation) {
     try {
-      const res: S["LiveOut"] = await api.live(cursor, cursor == null ? 0 : 25);
+      const res: S["LiveOut"] = await api.live(cursor, cursor == null ? 0 : 20); // under hosting proxy timeouts (Vercel)
       if (mine !== generation) return;
       if (cursor != null && res.events.length) listeners.forEach((fn) => fn(res.events));
       cursor = res.cursor;
