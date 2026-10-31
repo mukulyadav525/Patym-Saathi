@@ -6,6 +6,7 @@ os.environ["DATABASE_URL"] = os.environ.get(
 )
 os.environ["DEMO_MODE"] = "true"
 os.environ["DEMO_SHORTAGE"] = "true"
+os.environ["DEMO_RICH_DATA"] = "false"  # tests check exact figures of the core seed
 os.environ["PAYTM_ENV"] = "demo"
 # Tests never call Sarvam (and never spend credits), even when backend/.env has a key.
 os.environ["SARVAM_API_KEY"] = ""

@@ -123,6 +123,10 @@ def reset(db: Session, today: date | None = None) -> None:
                               entry_date=today + timedelta(days=offset), kind=kind, amount=Decimal(amount),
                               note=note, source="SAMPLE"))
 
+    if settings.demo_rich_data:
+        from app import seed_rich
+        seed_rich.add(db, merchant, uuid.uuid5(SEED_NS, "user:" + fx.MERCHANT["email"]), suppliers, today, now)
+
     paytm_mode = "STAGING" if settings.paytm_env == "staging" else "DEMO"
     for owner in (merchant, other):
         db.add_all([

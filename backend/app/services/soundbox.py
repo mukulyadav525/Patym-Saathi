@@ -450,7 +450,8 @@ def sale_dict(sale: CounterSale) -> dict:
 
 # What the item is called at the counter, for Saathi's Hinglish replies (bills and the app keep catalog names).
 SPOKEN = {"ATTA10": "atta 10 kilo", "ATTA5": "atta 5 kilo", "RICE5": "chawal", "SUGAR1": "cheeni", "TOOR1": "toor dal",
-          "OIL1": "tel", "TEA250": "chai patti", "NOODLE12": "maggi", "HAIROIL": "baalon ka tel"}
+          "OIL1": "tel", "TEA250": "chai patti", "NOODLE12": "maggi", "HAIROIL": "baalon ka tel", "SALT1": "namak",
+          "BISCUIT8": "biscuit", "SOAP4": "sabun"}
 
 
 def _items_text(lines: list[dict], spoken: bool = False) -> str:

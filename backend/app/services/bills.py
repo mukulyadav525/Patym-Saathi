@@ -25,6 +25,9 @@ ALIASES = {
     "TEA250": ("tea", "chai patti", "chai", "चाय"),
     "NOODLE12": ("noodle", "noodles", "maggi", "नूडल्स"),
     "HAIROIL": ("hair oil", "coconut oil", "बालों"),
+    "SALT1": ("salt", "namak", "नमक"),
+    "BISCUIT8": ("biscuit", "biscuits", "biskut", "glucose", "बिस्कुट"),
+    "SOAP4": ("soap", "sabun", "saabun", "साबुन"),
 }
 UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gms|grams?|l|ltr|litre|liter|ml)\b", re.I)
 NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")

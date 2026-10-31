@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Demo controls
     demo_mode: bool = True
     demo_shortage: bool = True
+    demo_rich_data: bool = True  # fuller demo history (seed_rich); tests turn it off to keep exact figures
     demo_webhook_key: str = "dev-demo-webhook-key"
     demo_password: str = "saathi-demo-2026"
     restock_safety_packs: int = 0
