@@ -23,6 +23,7 @@ from app.models import (
     Task,
 )
 from app.services import brief as brief_service
+from app.services import profit
 from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
 
@@ -41,15 +42,19 @@ def merchant_out(merchant: Merchant) -> s.MerchantOut:
 
 def inventory(db: Session, merchant_id: uuid.UUID) -> list[s.InventoryItem]:
     sales = sales_summary(db, merchant_id)
+    costs = profit.unit_costs(db, merchant_id)
     out = []
     for product, inv in inventory_snapshot(db, merchant_id):
+        cost = costs.get(str(product.id))
         weeks = sales.get(str(product.id), {}).get("weeks", [])[-4:]
         avg = Decimal(sum(weeks)) / len(weeks) if weeks else Decimal("0")
         out.append(s.InventoryItem(
             product_id=str(product.id), sku=product.sku, name=product.name, name_hi=product.name_hi,
             pack_label=product.pack_label, usable_packs=inv.usable_packs, avg_weekly=f"{avg:.0f}",
             sell_price=m(product.sell_price), low=bool(weeks) and Decimal(inv.usable_packs) < avg * brief_service.LOW_STOCK_RATIO,
-            source=inv.source, updated_at=inv.source_updated_at,
+            source=inv.source, updated_at=inv.source_updated_at, brand=product.brand,
+            cost_price=m(cost[0]) if cost else None, cost_estimated=cost[1] if cost else False,
+            profit_per_pack=m(product.sell_price - cost[0]) if cost else None,
         ))
     return out
 
@@ -103,6 +108,8 @@ def plan_out(plan: Plan) -> s.PlanOut:
         diff=[s.PlanDiff(**d) for d in payload.get("diff", [])], assumptions=payload.get("assumptions", []),
         sources=evidence.get("sources", []), missing=evidence.get("missing", []), created_at=plan.created_at,
         festival=payload.get("festival"), festival_evidence=evidence.get("festival", []),
+        purchase=s.PlanPurchase(**{k: payload["purchase"][k] for k in s.PlanPurchase.model_fields})
+        if payload.get("purchase") else None,
     )
 
 

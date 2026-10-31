@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -32,7 +33,7 @@ export default function Inventory() {
   };
   return (
     <>
-      <PageTitle title="Inventory" sub="Stock changes only when goods are received — never when an order is placed." />
+      <PageTitle title="Inventory & vendors" sub="Stock and cost price change only when goods are received — never when an order is placed." />
       {error && !data ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Skeleton /> : (
         <>
           {low.length > 0 && (
@@ -47,16 +48,20 @@ export default function Inventory() {
             </Card>
           )}
           <div className="card overflow-x-auto">
-            <table className="num w-full min-w-[640px] text-sm">
+            <table className="num w-full min-w-[860px] text-sm">
               <thead className="text-left text-xs text-muted">
                 <tr className="border-b border-line">
-                  <th className="p-4">Item</th><th>Pack</th><th className="text-right">Stock (packs)</th><th className="text-right">Avg / week</th><th className="text-right">Sell price</th><th className="px-4">Source</th>
+                  <th className="p-4">Item</th><th>Pack</th><th className="text-right">Stock (packs)</th><th className="text-right">Avg / week</th>
+                  <th className="text-right">Cost price</th><th className="text-right">Sell price</th><th className="text-right">Profit / pack</th><th className="px-4">Source</th><th />
                 </tr>
               </thead>
               <tbody>
                 {data.map((i) => (
                   <tr key={i.product_id} className="border-b border-[#F1F4F8] last:border-0">
-                    <td className="p-4"><b>{i.name}</b> <span className="text-muted">{i.name_hi}</span></td>
+                    <td className="p-4">
+                      <b>{i.name}</b> <span className="text-muted">{i.name_hi}</span>
+                      {i.brand && <p className="text-xs text-ink-soft">{i.brand}</p>}
+                    </td>
                     <td>{i.pack_label}</td>
                     <td className="text-right">
                       <span className="inline-flex items-center justify-end gap-2">
@@ -65,8 +70,15 @@ export default function Inventory() {
                       </span>
                     </td>
                     <td className="text-right">{i.avg_weekly}</td>
+                    <td className="text-right">{rupees(i.cost_price, i.cost_price && Number(i.cost_price) % 1 ? 2 : 0)}{i.cost_estimated && <span className="text-muted" title="No purchase on record; supplier price"> *</span>}</td>
                     <td className="text-right">{rupees(i.sell_price)}</td>
+                    <td className={`text-right font-bold ${Number(i.profit_per_pack) < 0 ? "text-red" : "text-green"}`}>{rupees(i.profit_per_pack, i.profit_per_pack && Number(i.profit_per_pack) % 1 ? 2 : 0)}</td>
                     <td className="px-4"><Badge tone={i.source === "SAMPLE" ? "violet" : "green"}>{i.source}</Badge> <span className="text-[11px] text-muted">{when(i.updated_at)}</span></td>
+                    <td className="pr-4 text-right">
+                      <Link href={`/inventory/${i.product_id}`} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-bold text-[#0083AD] hover:bg-cyan-soft">
+                        <ArrowLeftRight className="size-3.5" /> Compare vendors
+                      </Link>
+                    </td>
                   </tr>
                 ))}
               </tbody>

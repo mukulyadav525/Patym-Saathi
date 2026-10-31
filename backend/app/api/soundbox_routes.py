@@ -98,7 +98,8 @@ def simulate_payment(body: s.QrPaymentIn, ctx: Ctx = Depends(current_ctx), db: S
     """'Customer pays' button on the Soundbox (DEMO)."""
     _demo_only()
     ratelimit.check(ctx.merchant_id, "qr_pay")
-    qr = soundbox.receive_qr_payment(db, ctx.merchant, parse_money(body.amount, "Amount", "1", "100000"), body.payer, ctx.actor)
+    qr = soundbox.receive_qr_payment(db, ctx.merchant, parse_money(body.amount, "Amount", "1", "100000"), body.payer, ctx.actor,
+                                     body.sale_id)
     return s.QrPaymentOut(**soundbox.qr_dict(db, qr))
 
 
@@ -145,10 +146,12 @@ def _demo_only() -> None:
 
 
 @pay_public.get("/pay/{token}", response_model=s.PayPageInfo)
-def pay_info(token: str, db: Session = Depends(get_db)) -> s.PayPageInfo:
+def pay_info(token: str, bill: uuid.UUID | None = Query(None, description="A bill's own QR: show that bill"),
+             db: Session = Depends(get_db)) -> s.PayPageInfo:
     _demo_only()
     merchant = soundbox.merchant_for_token(db, token)
-    return s.PayPageInfo(shop_name=merchant.display_name, locality=merchant.locality, mode="DEMO")
+    found = s.PayBill(**soundbox.bill_dict(soundbox.find_bill(db, merchant.id, bill))) if bill else None
+    return s.PayPageInfo(shop_name=merchant.display_name, locality=merchant.locality, mode="DEMO", bill=found)
 
 
 @pay_public.post("/pay/{token}", response_model=s.QrPaymentOut)
@@ -158,5 +161,5 @@ def pay(token: str, body: s.QrPaymentIn, db: Session = Depends(get_db)) -> s.QrP
     merchant = soundbox.merchant_for_token(db, token)
     ratelimit.check(merchant.id, "qr_pay")
     qr = soundbox.receive_qr_payment(db, merchant, parse_money(body.amount, "Amount", "1", "100000"),
-                                     body.payer or "Customer", "customer")
+                                     body.payer or "Customer", "customer", body.sale_id)
     return s.QrPaymentOut(**soundbox.qr_dict(db, qr))

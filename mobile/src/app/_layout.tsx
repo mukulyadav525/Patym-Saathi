@@ -31,6 +31,7 @@ function Gate() {
         <Stack.Screen name="task/[id]" />
         <Stack.Screen name="brief" />
         <Stack.Screen name="inventory" />
+        <Stack.Screen name="sourcing/[id]" />
         <Stack.Screen name="dues" />
         <Stack.Screen name="orders" />
         <Stack.Screen name="activity" />

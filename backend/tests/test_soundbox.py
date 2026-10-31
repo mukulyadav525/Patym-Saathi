@@ -226,7 +226,8 @@ def test_llm_understanding_is_used_and_checked(client, auth, monkeypatch):
     r = say(client, auth, "Saathi, Mukul ko teen cheeni aur kuch aur diya khate mein")
     assert r["action"] == "RECORDED" and r["understood_by"].startswith("sarvam")
     assert r["sale"]["lines"] == [{"product_id": r["sale"]["lines"][0]["product_id"], "sku": "SUGAR1", "name": "Sugar", "pack_label": "1 kg",
-                                   "packs": 3, "unit_price": "48.00", "amount": "144.00"}]  # price from the catalog
+                                   "packs": 3, "unit_price": "48.00", "amount": "144.00",  # price from the catalog
+                                   "cost": "126.00", "cost_estimated": False}]  # cost from the stock it used up
     assert "list mein nahi mila" in r["reply"]
 
 
@@ -249,3 +250,51 @@ def test_spoken_udhaar_overrides_model(client, auth, monkeypatch):
     _fake_llm(monkeypatch, {"intent": "SALE", "customer": "Mukul", "payment": "CASH", "amount": None,
                             "items": [{"product": "Atta", "quantity": 1, "unit": "pack"}]})
     assert say(client, auth, "Saathi atta liya Mukul ne udhaar")["sale"]["payment_mode"] == "UDHAAR"
+
+
+def _pay_token(client, auth):
+    return client.get("/api/v1/soundbox/qr", headers=auth).json()["pay_path"].rsplit("/", 1)[1]
+
+
+def test_multi_item_bill_is_spoken_and_paid_by_its_own_qr(client, auth):
+    r = say(client, auth, "Saathi, Mukul ne do dal aur ek atta liya")
+    assert r["action"] == "ASKED" and r["sale"]["question"] == "PAYMENT"
+    assert {ln["sku"]: ln["packs"] for ln in r["sale"]["lines"]} == {"TOOR1": 2, "ATTA10": 1}
+    assert r["sale"]["total"] == "760.00" and "kul ₹760" in r["reply"] and "udhaar" in r["reply"]
+    token, sale_id = _pay_token(client, auth), r["sale"]["id"]
+    page = client.get(f"/api/v1/pay/{token}?bill={sale_id}").json()
+    assert page["bill"]["status"] == "DUE" and page["bill"]["total"] == "760.00" and len(page["bill"]["lines"]) == 2
+    assert "customer_name" not in page["bill"] and "cost" not in page["bill"]["lines"][0]  # the shop's cost stays private
+    assert client.post(f"/api/v1/pay/{token}", json={"amount": "700", "sale_id": sale_id}).json()["code"] == "AMOUNT_MISMATCH"
+    paid = client.post(f"/api/v1/pay/{token}", json={"amount": "760", "sale_id": sale_id}).json()
+    assert paid["sale_id"] == sale_id and paid["bill_number"] == "SB-0001"
+    entry = client.get("/api/v1/soundbox/today", headers=auth).json()["entries"][0]
+    assert entry["payment_mode"] == "UPI" and entry["payment_status"] == "PAID" and entry["customer_name"] == "Mukul Yadav"
+    assert client.get(f"/api/v1/pay/{token}?bill={sale_id}").json()["bill"]["status"] == "PAID"
+    assert client.post(f"/api/v1/pay/{token}", json={"amount": "760", "sale_id": sale_id}).json()["code"] == "BILL_PAID"
+
+
+def test_bill_qr_pays_its_bill_not_another_with_same_amount(client, auth):
+    first = say(client, auth, "Saathi, toor dal di Mukul ko UPI se")["sale"]
+    second = say(client, auth, "Saathi, toor dal di Priya ko UPI se")["sale"]
+    assert first["payment_status"] == second["payment_status"] == "AWAITED"
+    client.post("/api/v1/soundbox/qr-payments", json={"amount": "170", "sale_id": first["id"]}, headers=auth)
+    status = {e["id"]: e["payment_status"] for e in client.get("/api/v1/soundbox/today", headers=auth).json()["entries"]}
+    assert status[first["id"]] == "PAID" and status[second["id"]] == "AWAITED"
+
+
+def test_bill_qr_after_udhaar_or_from_another_shop(client, auth):
+    sale = say(client, auth, "Saathi, atta liya Mukul ne udhaar")["sale"]
+    token = _pay_token(client, auth)
+    assert client.post(f"/api/v1/pay/{token}", json={"amount": "420", "sale_id": sale["id"]}).json()["code"] == "BILL_ON_KHATA"
+    other = _pay_token(client, login(client, "owner@storeb.demo"))
+    assert client.get(f"/api/v1/pay/{other}?bill={sale['id']}").status_code == 404
+
+
+def test_spoken_quantity_overrides_model(client, auth, monkeypatch):
+    # The model read "teen" (three) as 1; the number said before the item wins.
+    _fake_llm(monkeypatch, {"intent": "SALE", "customer": "Priya", "payment": "CASH", "amount": None,
+                            "items": [{"product": "Toor dal", "quantity": 1, "unit": "pack"},
+                                      {"product": "Atta", "quantity": 1, "unit": "pack"}]})
+    r = say(client, auth, "Saathi, teen dal aur ek atta liye Priya ne cash")
+    assert {ln["sku"]: ln["packs"] for ln in r["sale"]["lines"]} == {"TOOR1": 3, "ATTA10": 1}

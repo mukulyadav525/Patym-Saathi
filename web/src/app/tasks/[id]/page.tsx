@@ -6,7 +6,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Badge, Button, Card, ErrorBox, SimBadge, Skeleton, StateBadge, useLoad } from "@/components/ui";
-import { api, ApiError, newKey, plural, rupees, when, type TaskDetail } from "@/lib/api";
+import { api, ApiError, newKey, plural, rupees, when, type S, type TaskDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { copyText } from "@/lib/share";
 
@@ -90,11 +90,12 @@ export default function TaskPage() {
                   <div className="absolute inset-y-0 left-0 bg-cyan" style={{ width: `${(Number(plan.total) / Number(plan.budget)) * 100}%` }} />
                   <div className="absolute inset-y-0 left-0 bg-navy" style={{ width: `${(Number(plan.committed_total) / Number(plan.budget)) * 100}%` }} />
                 </div>
+                {plan.purchase && <PurchaseChange p={plan.purchase} />}
                 <ul className="num mt-4 divide-y divide-line text-sm sm:hidden">
                   {plan.lines.map((l) => (
                     <li key={`${l.product_id}-${l.supplier_name}`} className="flex items-start justify-between gap-3 py-2.5">
                       <div className="min-w-0">
-                        <p><b>{l.name}</b> <span className="text-xs text-muted">{l.pack_label}</span> {l.status === "COMMITTED" && <Badge tone="navy">ordered</Badge>}</p>
+                        <p><b>{l.name}</b> <span className="text-xs text-muted">{l.pack_label}{l.brand && ` · ${l.brand}`}</span> {l.status === "COMMITTED" && <Badge tone="navy">ordered</Badge>}</p>
                         <p className="text-xs text-muted">{l.packs} × {rupees(l.unit_price)} · {l.supplier_name}{l.status !== "COMMITTED" && ` · ${l.stock} in stock, ${Number(l.sold_per_week).toFixed(0)}/wk`}</p>
                       </div>
                       <span className="shrink-0 font-bold">{rupees(l.line_total)}</span>
@@ -112,7 +113,7 @@ export default function TaskPage() {
                     <tbody>
                       {plan.lines.map((l) => (
                         <tr key={`${l.product_id}-${l.supplier_name}`} className="border-b border-[#F1F4F8]">
-                          <td className="py-2.5"><b>{l.name}</b> <span className="text-xs text-muted">{l.pack_label}</span> {l.status === "COMMITTED" && <Badge tone="navy">ordered</Badge>}</td>
+                          <td className="py-2.5"><b>{l.name}</b> <span className="text-xs text-muted">{l.pack_label}{l.brand && ` · ${l.brand}`}</span> {l.status === "COMMITTED" && <Badge tone="navy">ordered</Badge>}</td>
                           <td className="text-center">{l.status === "COMMITTED" ? "–" : Number(l.sold_per_week).toFixed(0)}</td>
                           <td className="text-center">{l.status === "COMMITTED" ? "–" : l.stock}</td>
                           <td className="text-center font-extrabold">{l.packs}</td>
@@ -371,5 +372,18 @@ function ConfirmDialog({ task, onClose, onDone, onError, onRenewed }: {
         <Button kind="ghost" className="mt-2 w-full" onClick={onClose}>Cancel</Button>
       </div>
     </div>
+  );
+}
+
+// A purchase picked in Compare vendors: what changes for the item once its goods arrive (part of what is approved).
+function PurchaseChange({ p }: { p: NonNullable<S["PlanOut"]["purchase"]> }) {
+  const brand = p.brand !== p.from_brand;
+  const price = Number(p.sell_price) !== Number(p.from_sell_price);
+  if (!brand && !price) return null;
+  return (
+    <p className="mt-4 rounded-xl bg-cyan-soft px-3 py-2 text-sm text-navy">
+      When the goods arrive:{brand && <> switches from <b>{p.from_brand || "current stock"}</b> to <b>{p.brand}</b></>}
+      {brand && price && ";"}{price && <> selling price <b className="num">{rupees(p.from_sell_price)} → {rupees(p.sell_price)}</b></>}.
+    </p>
   );
 }

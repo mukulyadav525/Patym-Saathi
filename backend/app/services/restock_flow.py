@@ -28,7 +28,7 @@ from app.models import (
     today_ist,
     utcnow,
 )
-from app.services import audit
+from app.services import audit, profit
 from app.services.common import canonical_hash, move_order, move_task
 from app.services.restock import (
     BudgetExceeded, ItemInput, PlanLine, PlanResult, QuoteInput, build_plan, festival_uplift, money,
@@ -122,7 +122,9 @@ def _inputs(db: Session, merchant_id: uuid.UUID, task_id: uuid.UUID | None) -> t
     inbound = inbound_packs(db, merchant_id, exclude_task=task_id)
     items: list[ItemInput] = []
     evidence_items = []
+    brands = {}
     for product, inv in inventory_snapshot(db, merchant_id):
+        brands[product.id] = product.brand
         pid = str(product.id)
         weeks = sales.get(pid, {}).get("weeks", [])
         items.append(ItemInput(pid, product.name, product.pack_label, product.pack_size, inv.usable_packs, weeks,
@@ -135,10 +137,12 @@ def _inputs(db: Session, merchant_id: uuid.UUID, task_id: uuid.UUID | None) -> t
     quotes = []
     evidence_quotes = []
     for quote, supplier in supplier_quotes(db, merchant_id):
+        if brands.get(quote.product_id) and quote.brand and quote.brand != brands[quote.product_id]:
+            continue  # restocking never switches brand on its own; that is a purchase the merchant picks
         quotes.append(QuoteInput(str(quote.id), str(supplier.id), supplier.name, str(quote.product_id),
                                  quote.unit_price, quote.available_packs, quote.min_order_packs, quote.valid_until))
         evidence_quotes.append({
-            "supplier": supplier.name, "mode": supplier.connector_mode, "product_id": str(quote.product_id),
+            "supplier": supplier.name, "mode": supplier.connector_mode, "product_id": str(quote.product_id), "brand": quote.brand,
             "unit_price": f"{quote.unit_price:.2f}", "available_packs": quote.available_packs,
             "fetched_at": quote.fetched_at.isoformat(), "valid_until": quote.valid_until.isoformat(),
         })
@@ -193,7 +197,7 @@ def festival_uplifts(db: Session, merchant_id: uuid.UUID, code: str) -> tuple[di
 def approval_payload(task: Task, plan: Plan) -> dict:
     """The exact thing the merchant approves. Hash binds all of it."""
     lines = plan.payload["lines"]
-    return {
+    out = {
         "merchant_id": str(task.merchant_id),
         "task_id": str(task.id),
         "plan_id": str(plan.id),
@@ -209,6 +213,47 @@ def approval_payload(task: Task, plan: Plan) -> dict:
         "committed_total": f"{plan.committed_total:.2f}",
         "budget": f"{plan.budget:.2f}",
     }
+    if plan.payload.get("purchase"):
+        out["purchase"] = plan.payload["purchase"]  # brand, and the selling price that comes with it
+    return out
+
+
+def _purchase_plan(db: Session, task: Task) -> tuple[PlanResult, dict, dict]:
+    """A purchase the merchant picked from Compare vendors: exactly that offer, at its price today."""
+    want = task.parsed_intent["purchase"]
+    row = db.execute(select(SupplierQuote, Supplier, Product, Inventory)
+                     .join(Supplier, Supplier.id == SupplierQuote.supplier_id)
+                     .join(Product, Product.id == SupplierQuote.product_id)
+                     .join(Inventory, Inventory.product_id == Product.id)
+                     .where(SupplierQuote.id == uuid.UUID(want["quote_id"]), Product.merchant_id == task.merchant_id)).first()
+    if row is None:
+        raise ApiError(404, "NOT_FOUND", "That supplier offer is no longer available")
+    quote, supplier, product, inv = row
+    supplier_sim.refresh_quotes(db, [quote] if supplier.connector_mode == "SIMULATED" else [])
+    packs = int(want["packs"])
+    if quote.available_packs < packs:
+        raise ApiError(409, "NOT_ENOUGH_STOCK", f"{supplier.name} has only {quote.available_packs} packs of {quote.brand}")
+    total = money(quote.unit_price * packs)
+    weeks = sales_summary(db, task.merchant_id).get(str(product.id), {}).get("weeks", [])
+    line = PlanLine(product_id=str(product.id), name=product.name, pack_label=product.pack_label,
+                    sold_per_week=money(Decimal(sum(weeks)) / len(weeks)) if weeks else Decimal("0"),
+                    stock=inv.usable_packs, forecast=0, packs=packs, supplier_id=str(supplier.id),
+                    supplier_name=supplier.name, quote_id=str(quote.id), unit_price=money(quote.unit_price),
+                    line_total=total)
+    switch = bool(quote.brand) and quote.brand != product.brand
+    sell = Decimal(want["sell_price"])
+    assumptions = [f"Cost price {quote.brand} ₹{quote.unit_price:,.2f} per {product.pack_label} from {supplier.name}"]
+    if switch:
+        assumptions.append(f"Switches {product.name} from {product.brand or 'the current stock'} to {quote.brand} when the goods arrive")
+    if sell != product.sell_price:
+        assumptions.append(f"Selling price changes ₹{product.sell_price:,.0f} → ₹{sell:,.0f} when the goods arrive")
+    purchase = {"product_id": str(product.id), "quote_id": str(quote.id), "brand": quote.brand, "quality": quote.quality,
+                "from_brand": product.brand, "sell_price": f"{sell:.2f}", "from_sell_price": f"{product.sell_price:.2f}"}
+    evidence = {"items": [], "quotes": [{"supplier": supplier.name, "mode": supplier.connector_mode, "brand": quote.brand,
+                                         "product_id": str(product.id), "unit_price": f"{quote.unit_price:.2f}",
+                                         "available_packs": quote.available_packs, "valid_until": quote.valid_until.isoformat()}],
+                "sources": [f"Price: {supplier.name} price list ({supplier.connector_mode})"], "missing": []}
+    return PlanResult([line], total, Decimal("0"), total, packs, assumptions=assumptions), evidence, purchase
 
 
 def draft_plan(
@@ -217,20 +262,24 @@ def draft_plan(
     diff: list[dict] | None = None,
 ) -> Plan:
     settings = get_settings()
-    items, quotes, evidence = _inputs(db, task.merchant_id, task.id)
     horizon = int(task.parsed_intent.get("horizon_days", 7))
-    uplifts, festival_name = None, None
-    if task.parsed_intent.get("festival"):
+    uplifts, festival_name, purchase = None, None, None
+    if task.parsed_intent.get("purchase"):
+        result, evidence, purchase = _purchase_plan(db, task)
+    else:
+        items, quotes, evidence = _inputs(db, task.merchant_id, task.id)
+    if purchase is None and task.parsed_intent.get("festival"):
         uplifts, festival_evidence, festival_name = festival_uplifts(db, task.merchant_id, task.parsed_intent["festival"])
         evidence["festival"] = festival_evidence
         evidence["sources"].append(f"Festival demand: last {festival_name} week vs the weeks before it (SAMPLE)")
         if not uplifts:
             evidence["missing"].append("No past festival sales found; using normal weekly demand")
     try:
-        result: PlanResult = build_plan(
-            items, quotes, budget, utcnow(), horizon_days=horizon, safety_packs=settings.restock_safety_packs,
-            committed=committed, resource_only=resource_only, uplift=uplifts or None, festival_name=festival_name,
-        )
+        if purchase is None:
+            result: PlanResult = build_plan(
+                items, quotes, budget, utcnow(), horizon_days=horizon, safety_packs=settings.restock_safety_packs,
+                committed=committed, resource_only=resource_only, uplift=uplifts or None, festival_name=festival_name,
+            )
     except BudgetExceeded as exc:
         raise ApiError(422, "BUDGET_EXCEEDED", str(exc), {"total": f"{exc.total:.2f}", "budget": f"{exc.budget:.2f}"}) from exc
 
@@ -253,6 +302,9 @@ def draft_plan(
         "horizon_days": horizon,
         "festival": festival_name,
     }
+    if purchase is not None:
+        payload["purchase"] = purchase
+        payload["lines"][0].update(brand=purchase["brand"], quality=purchase["quality"])
     plan = Plan(task_id=task.id, version=version, budget=result.budget, total=result.total,
                 committed_total=result.committed_total, payload=payload, payload_hash="", status="ACTIVE",
                 reason=reason)
@@ -436,6 +488,12 @@ def execute_order(db: Session, task: Task, approval: Approval, actor: str) -> di
 
 
 def replan_after_shortage(db: Session, task: Task, old_plan: Plan, unavailable: dict[str, int]) -> dict:
+    if task.parsed_intent.get("purchase"):
+        # The merchant picked this brand from this supplier; buying another one instead is their call.
+        task.result_note = "The supplier could not supply it; nothing else was ordered. Pick another offer in Compare vendors."
+        move_task(db, task, "VERIFYING", "saathi", task.result_note)
+        settle_if_done(db, task, "saathi")
+        return {"shortage": True, "replanned": False}
     committed = _committed_lines(db, task)
     old_lines = {line["product_id"]: line for line in old_plan.payload["lines"]}
     try:
@@ -503,10 +561,27 @@ def settle_if_done(db: Session, task: Task, actor: str) -> None:
     move_task(db, task, "PARTIALLY_COMPLETED" if partial else "COMPLETED", "saathi", note)
 
 
+def _apply_purchase(db: Session, order: Order, product: Product, purchase: dict, actor: str) -> None:
+    """The brand and selling price the merchant approved with the purchase take effect once its goods are in."""
+    changes = []
+    if purchase["brand"] and purchase["brand"] != product.brand:
+        changes.append(f"brand {product.brand or '—'} → {purchase['brand']}")
+        product.brand = purchase["brand"]
+    sell = Decimal(purchase["sell_price"])
+    if sell != product.sell_price:
+        changes.append(f"selling price ₹{product.sell_price:,.0f} → ₹{sell:,.0f}")
+        product.sell_price = sell
+    if changes:
+        audit.record(db, order.merchant_id, actor, "ITEM_UPDATED", "product", product.id,
+                     f"{product.name}: " + ", ".join(changes) + f" ({order.reference} received)", task_id=order.task_id)
+
+
 def receive_goods(db: Session, order: Order, actor: str) -> int:
     if order.status not in OPEN_ORDER_STATES:
         raise ApiError(409, "INVALID_TRANSITION", f"{order.reference} is {order.status}, cannot receive goods")
     received = 0
+    supplier = db.get(Supplier, order.supplier_id)
+    purchase = (db.get(Plan, order.plan_id).payload or {}).get("purchase")
     for line in db.scalars(select(OrderLine).where(OrderLine.order_id == order.id, OrderLine.line_status == "ACCEPTED")):
         inv = db.scalars(select(Inventory).where(Inventory.merchant_id == order.merchant_id,
                                                  Inventory.product_id == line.product_id).with_for_update()).one()
@@ -515,6 +590,12 @@ def receive_goods(db: Session, order: Order, actor: str) -> int:
         inv.source_updated_at = utcnow()
         inv.updated_at = utcnow()
         received += line.packs
+        quote = db.get(SupplierQuote, line.quote_id)
+        product = db.get(Product, line.product_id)
+        profit.add_lot(db, order.merchant_id, line.product_id, line.packs, line.unit_price, "ORDER",
+                       supplier_name=supplier.name, brand=quote.brand if quote else product.brand, order_id=order.id)
+        if purchase and purchase["product_id"] == str(product.id):
+            _apply_purchase(db, order, product, purchase, actor)
     move_order(db, order, "GOODS_RECEIVED", actor, f"{order.reference}: {received} packs received (simulated delivery)",
                details={"packs": received})
 

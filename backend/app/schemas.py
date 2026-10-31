@@ -1,5 +1,6 @@
 """Request/response schemas. Money is serialised as a 2-decimal string to avoid float rounding."""
 
+import uuid
 from datetime import date, datetime
 from typing import Any, Literal
 
@@ -66,6 +67,10 @@ class InventoryItem(BaseModel):
     low: bool
     source: str
     updated_at: datetime
+    brand: str = ""
+    cost_price: MoneyStr | None = Field(default=None, description="What the stock in hand cost per pack")
+    cost_estimated: bool = False
+    profit_per_pack: MoneyStr | None = None
 
 
 class InvoiceOut(BaseModel):
@@ -120,6 +125,18 @@ class PlanLineOut(BaseModel):
     line_total: MoneyStr
     status: str
     uplift: str | None = None
+    brand: str | None = None
+    quality: str | None = None
+
+
+class PlanPurchase(BaseModel):
+    """A purchase picked in Compare vendors: what changes for the item when its goods arrive."""
+    product_id: str
+    brand: str
+    quality: str
+    from_brand: str
+    sell_price: MoneyStr
+    from_sell_price: MoneyStr
 
 
 class PlanDiff(BaseModel):
@@ -149,6 +166,7 @@ class PlanOut(BaseModel):
     missing: list[str]
     festival: str | None = None
     festival_evidence: list[dict[str, Any]] = []
+    purchase: PlanPurchase | None = None
     created_at: datetime
 
 
@@ -588,12 +606,17 @@ class CounterLine(BaseModel):
     amount: MoneyStr
 
 
+class CounterLineOut(CounterLine):
+    cost: MoneyStr | None = Field(default=None, description="What these packs cost the shop (oldest stock first)")
+    cost_estimated: bool = False
+
+
 class CounterSaleOut(BaseModel):
     id: str
     bill_number: str | None
     kind: Literal["SALE", "RETURN", "PAYMENT"]
     customer_name: str | None
-    lines: list[CounterLine]
+    lines: list[CounterLineOut]
     total: MoneyStr
     payment_mode: Literal["UPI", "CASH", "UDHAAR"] | None
     payment_status: Literal["PAID", "AWAITED", "ON_KHATA"] | None
@@ -623,6 +646,7 @@ class SoundboxResult(BaseModel):
 class QrPaymentIn(BaseModel):
     amount: str = Field(max_length=12)
     payer: str = Field(default="", max_length=60)
+    sale_id: uuid.UUID | None = Field(default=None, description="The bill this pays (its QR); the amount must match")
 
 
 class QrPaymentOut(BaseModel):
@@ -656,10 +680,19 @@ class SoundboxQr(BaseModel):
     mode: str
 
 
+class PayBill(BaseModel):
+    id: str
+    bill_number: str | None = Field(description="Given when the bill is recorded; a bill still being spoken has none")
+    lines: list[CounterLine]
+    total: MoneyStr
+    status: Literal["DUE", "PAID", "ON_KHATA", "CANCELLED"]
+
+
 class PayPageInfo(BaseModel):
     shop_name: str
     locality: str
     mode: str
+    bill: PayBill | None = None
 
 
 class LiveEventOut(BaseModel):
@@ -681,3 +714,80 @@ class AudioOut(BaseModel):
     audio: str
     mime: str = "audio/mpeg"
     text: str
+
+
+# --- buying from vendors, cost price and profit ---------------------------------------------------------------
+
+class VendorOffer(BaseModel):
+    quote_id: str
+    supplier_name: str
+    connector_mode: str
+    brand: str
+    quality: Literal["PREMIUM", "STANDARD", "ECONOMY"]
+    quality_note: str
+    cost_price: MoneyStr
+    mrp: MoneyStr | None
+    sell_price: MoneyStr = Field(description="Your price for the brand you stock; else what nearby shops charge. Never above MRP")
+    profit_per_pack: MoneyStr
+    margin_pct: str
+    monthly_profit: MoneyStr = Field(description="Profit per pack x your usual weekly sales x 4")
+    available_packs: int
+    min_order_packs: int
+    eta: str
+    current_brand: bool
+    best: bool = Field(description="Most profit per pack among offers available now")
+    cheapest_for_current: bool
+
+
+class SourcingOut(BaseModel):
+    product_id: str
+    name: str
+    name_hi: str
+    pack_label: str
+    brand: str
+    sell_price: MoneyStr
+    cost_price: MoneyStr | None
+    cost_estimated: bool
+    profit_per_pack: MoneyStr | None
+    stock: int
+    avg_weekly: str
+    suggested_packs: int
+    offers: list[VendorOffer]
+    recommendation: str
+    notes: list[str]
+    sources: list[str]
+
+
+class PurchaseIn(BaseModel):
+    quote_id: uuid.UUID
+    packs: int = Field(ge=1, le=500)
+    sell_price: str | None = Field(default=None, max_length=12, description="New selling price once the goods arrive")
+
+
+class ProfitItem(BaseModel):
+    product_id: str
+    name: str
+    pack_label: str
+    brand: str
+    sell_price: MoneyStr
+    cost_price: MoneyStr | None
+    packs_sold: int
+    counter_packs: int
+    revenue: MoneyStr
+    cost: MoneyStr | None
+    profit: MoneyStr | None
+    margin_pct: str | None
+    profit_per_pack: MoneyStr | None
+    estimated: bool
+
+
+class ProfitReport(BaseModel):
+    period_from: date
+    period_to: date
+    revenue: MoneyStr
+    cost: MoneyStr | None
+    profit: MoneyStr | None
+    margin_pct: str | None
+    items: list[ProfitItem]
+    sources: list[str]
+    notes: list[str]

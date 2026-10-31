@@ -113,15 +113,22 @@ export const api = {
   soundboxListen: (form: FormData) => request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/listen", form, {}, SLOW_MS),
   soundboxText: (text: string, followup = false, speak = true) =>
     request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/text", { text, followup, speak }, {}, SLOW_MS),
+  sourcing: (productId: string) => request<S["SourcingOut"]>("GET", `/api/v1/products/${productId}/sourcing`),
+  buy: (quoteId: string, packs: number, sellPrice: string) =>
+    request<S["TaskDetail"]>("POST", "/api/v1/purchases", { quote_id: quoteId, packs, sell_price: sellPrice }),
+  profit: () => request<S["ProfitReport"]>("GET", "/api/v1/profit"),
   soundboxToday: () => request<S["SoundboxToday"]>("GET", "/api/v1/soundbox/today"),
   soundboxQr: () => request<S["SoundboxQr"]>("GET", "/api/v1/soundbox/qr"),
   soundboxUndo: (saleId: string) => request<S["CounterSaleOut"]>("POST", `/api/v1/soundbox/sales/${saleId}/undo`),
-  soundboxPay: (amount: string, payer = "") => request<S["QrPaymentOut"]>("POST", "/api/v1/soundbox/qr-payments", { amount, payer }),
+  soundboxPay: (amount: string, payer = "", saleId?: string) =>
+    request<S["QrPaymentOut"]>("POST", "/api/v1/soundbox/qr-payments", { amount, payer, sale_id: saleId ?? null }),
   announcement: (eventId: number) => request<S["AudioOut"]>("GET", `/api/v1/soundbox/announcements/${eventId}`, undefined, {}, SLOW_MS),
   live: (after: number | null, wait = 25) =>
     request<S["LiveOut"]>("GET", `/api/v1/live?wait=${wait}${after == null ? "" : `&after=${after}`}`, undefined, {}, (wait + 10) * 1000),
-  payInfo: (token: string) => request<S["PayPageInfo"]>("GET", `/api/v1/pay/${token}`),
-  pay: (token: string, amount: string, payer: string) => request<S["QrPaymentOut"]>("POST", `/api/v1/pay/${token}`, { amount, payer }),
+  payInfo: (token: string, bill?: string | null) =>
+    request<S["PayPageInfo"]>("GET", `/api/v1/pay/${token}${bill ? `?bill=${encodeURIComponent(bill)}` : ""}`),
+  pay: (token: string, amount: string, payer: string, saleId?: string) =>
+    request<S["QrPaymentOut"]>("POST", `/api/v1/pay/${token}`, { amount, payer, sale_id: saleId ?? null }),
 };
 
 /** "19 Oct" from an ISO date. */

@@ -1,7 +1,7 @@
 """Deterministic seed / demo reset. Run: `uv run python -m app.seed`."""
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from sqlalchemy import text
@@ -12,6 +12,7 @@ from app.adapters import sarvam
 from app.config import get_settings
 from app.db import Base, SessionLocal
 from app.models import (
+    IST,
     today_ist,
     DataConnection,
     Inventory,
@@ -23,6 +24,7 @@ from app.models import (
     Product,
     SalesEvent,
     SalesWeekly,
+    StockLot,
     Supplier,
     SupplierQuote,
     User,
@@ -67,13 +69,14 @@ def reset(db: Session, today: date | None = None) -> None:
     for order, (sku, name, name_hi, pack, stock, sales, price_a, price_b, sell) in enumerate(fx.PRODUCTS):
         for owner in (merchant, other):
             product = Product(merchant_id=owner.id, sku=sku, name=name, name_hi=name_hi, pack_label=pack, pack_size=1,
-                              sell_price=Decimal(sell), sort_order=order)
+                              sell_price=Decimal(sell), sort_order=order,
+                              brand=fx.CURRENT_BRANDS[sku][0])
             db.add(product)
             db.flush()
             db.add(Inventory(merchant_id=owner.id, product_id=product.id, on_hand_packs=stock, source="SAMPLE"))
             for week_start, sold in zip(week_starts, sales, strict=True):
                 db.add(SalesWeekly(merchant_id=owner.id, product_id=product.id, week_start=week_start,
-                                   packs_sold=sold, source="SAMPLE"))
+                                   packs_sold=sold, source="SAMPLE", unit_price=Decimal(sell)))
             event_packs, baseline = fx.FESTIVAL_SALES[sku]
             db.add(SalesEvent(merchant_id=owner.id, product_id=product.id, event_code=fx.FESTIVAL["code"],
                               event_name=fx.FESTIVAL["name"], event_date=date.fromisoformat(fx.FESTIVAL["last_date"]),
@@ -81,12 +84,23 @@ def reset(db: Session, today: date | None = None) -> None:
             db.add(PeerBenchmark(merchant_id=owner.id, product_id=product.id, locality=fx.PEER_LOCALITY,
                                  peer_median_weekly=Decimal(fx.PEER_MEDIANS[sku]), peer_count=fx.PEER_COUNT,
                                  period_label="Last 4 weeks", source="SAMPLE"))
+            brand, quality, note, mrp = fx.CURRENT_BRANDS[sku]
             for code, price, avail in (
                 ("A", price_a, fx.AVAILABLE_A),
                 ("B", price_b, fx.AVAILABLE_B.get(sku, fx.AVAILABLE_B_DEFAULT)),
             ):
                 db.add(SupplierQuote(supplier_id=suppliers[code].id, product_id=product.id, unit_price=Decimal(price),
-                                     available_packs=avail, valid_until=now + timedelta(hours=12)))
+                                     available_packs=avail, valid_until=now + timedelta(hours=12), brand=brand,
+                                     quality=quality, quality_note=note, mrp=Decimal(mrp), typical_sell_price=Decimal(sell)))
+            for code, offer_brand, grade, why, cost, offer_mrp, typical, avail in fx.OTHER_OFFERS.get(sku, []):
+                db.add(SupplierQuote(supplier_id=suppliers[code].id, product_id=product.id, unit_price=Decimal(cost),
+                                     available_packs=avail, valid_until=now + timedelta(hours=12), brand=offer_brand,
+                                     quality=grade, quality_note=why, mrp=Decimal(offer_mrp) if offer_mrp else None,
+                                     typical_sell_price=Decimal(typical)))
+            db.add(StockLot(merchant_id=owner.id, product_id=product.id, source="SAMPLE", brand=brand,
+                            supplier_name=suppliers[fx.OPENING_LOT_SUPPLIER].name, unit_cost=Decimal(price_a),
+                            packs_in=stock + sum(sales), packs_left=stock,
+                            received_at=datetime.combine(week_starts[0] - timedelta(days=1), time(10), tzinfo=IST)))
 
     for number, customer, phone, amount, due_offset, status in fx.INVOICES:
         db.add(Invoice(merchant_id=merchant.id, customer_name=customer, customer_phone_masked=phone,

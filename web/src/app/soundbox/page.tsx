@@ -1,6 +1,6 @@
 "use client";
 
-import { Keyboard, Loader2, Mic, MicOff, Power, ScanLine, Undo2, Volume2 } from "lucide-react";
+import { BookOpen, CheckCircle2, Keyboard, Loader2, Mic, MicOff, Power, ScanLine, Undo2, Volume2, X } from "lucide-react";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -20,6 +20,12 @@ const FOLLOWUP_MS = 12000;
 const MODE_LABEL: Record<string, string> = { UPI: "Paytm UPI", CASH: "Cash", UDHAAR: "Khata" };
 const STATUS_LABEL: Record<string, string> = { PAID: "Paid", AWAITED: "UPI awaited", ON_KHATA: "On khata" };
 const IDLE: Screen = { big: "Saathi", small: "Bolein: “Saathi, atta liya Mukul ne”", tone: "idle" };
+const SETTLED_MS = 12000; // a paid / khata bill stays on the standee this long, then the shop QR returns
+const QR_STYLE = { margin: 1, width: 560, color: { dark: "#002E6E", light: "#FFFFFF" } };
+
+// A counter sale with items is a bill: the standee shows it, with a QR for its exact amount while it is due.
+const isBill = (s: Entry | null | undefined): s is Entry => !!s && s.kind === "SALE" && s.lines.length > 0 && s.status !== "CANCELLED";
+const isDue = (s: Entry) => s.status === "PENDING" || s.payment_status === "AWAITED";
 
 function screenFor(r: Result): Screen {
   const sale = r.sale;
@@ -28,7 +34,10 @@ function screenFor(r: Result): Screen {
     const small = `${sale.bill_number} · ${sale.customer_name ?? "Walk-in"} · ${sale.payment_status === "AWAITED" ? "UPI awaited" : MODE_LABEL[sale.payment_mode ?? ""] ?? ""}`;
     return { big, small, tone: "ok" };
   }
-  if (r.action === "ASKED") return { big: "?", small: r.reply, tone: "ask" };
+  if (r.action === "ASKED") {
+    const billTotal = sale?.kind === "SALE" && (sale.question === "PAYMENT" || sale.question === "PAYMENT_NOW");
+    return { big: billTotal ? rupees(sale.total) : "?", small: r.reply, tone: "ask" };
+  }
   if (r.action === "CANCELLED") return { big: "Undo", small: r.reply, tone: "warn" };
   if (r.action === "NOT_UNDERSTOOD") return { big: "…", small: r.reply, tone: "warn" };
   return { big: "Saathi", small: r.reply, tone: "idle" };
@@ -37,6 +46,7 @@ function screenFor(r: Result): Screen {
 export default function SoundboxPage() {
   const { session } = useAuth();
   const today = useLoad(api.soundboxToday);
+  const reloadToday = today.reload;
   const qr = useLoad(api.soundboxQr);
   const [qrImage, setQrImage] = useState<string | null>(null);
   // The QR opens the DEMO pay page on this same site, so a phone that scans it can "pay" the shop.
@@ -57,11 +67,43 @@ export default function SoundboxPage() {
   const [showType, setShowType] = useState(false);
   const [payAmount, setPayAmount] = useState("");
   const [paying, setPaying] = useState(false);
+  const [bill, setBill] = useState<Entry | null>(null); // the bill from the last voice entry here
+  const [closedId, setClosedId] = useState<string | null>(null);
+  const [billQr, setBillQr] = useState<{ url: string; image: string } | null>(null);
+
+  // After a reload: the bill Saathi is still asking about, or the latest one still waiting for its UPI payment.
+  const t = today.data;
+  const waiting = t && (isBill(t.pending) ? t.pending : isBill(t.entries[0]) && t.entries[0].payment_status === "AWAITED" ? t.entries[0] : null);
+  const shown = bill ?? (waiting && waiting.id !== closedId ? waiting : null);
+  const billUrl = shown && payUrl && isDue(shown) ? `${payUrl}?bill=${shown.id}` : "";
+  const billImage = billQr?.url === billUrl ? billQr.image : null;
+
+  const closeBill = useCallback((id: string) => {
+    setClosedId(id);
+    setBill((b) => (b?.id === id ? null : b));
+  }, []);
 
   useEffect(() => {
     if (!payUrl) return;
-    void QRCode.toDataURL(payUrl, { margin: 1, width: 560, color: { dark: "#002E6E", light: "#FFFFFF" } }).then(setQrImage);
+    void QRCode.toDataURL(payUrl, QR_STYLE).then(setQrImage);
   }, [payUrl]);
+
+  useEffect(() => {
+    if (!billUrl) return;
+    let current = true;
+    void QRCode.toDataURL(billUrl, QR_STYLE).then((image) => current && setBillQr({ url: billUrl, image }));
+    return () => {
+      current = false;
+    };
+  }, [billUrl]);
+
+  // A settled bill (paid, or written in the khata) gives the standee back to the shop QR after a while.
+  useEffect(() => {
+    if (!shown || isDue(shown)) return;
+    const id = shown.id;
+    const timer = setTimeout(() => closeBill(id), SETTLED_MS);
+    return () => clearTimeout(timer);
+  }, [shown, closeBill]);
 
   const audioCtx = () => listener.current?.ctx ?? null;
 
@@ -90,6 +132,16 @@ export default function SoundboxPage() {
 
   const show = useCallback(async (r: Result) => {
     setScreen(screenFor(r));
+    if (r.action === "CANCELLED") {
+      // "Cancel karo" undoes the entry it names, or drops the bill still being asked about (no sale in the reply).
+      if (r.sale) closeBill(r.sale.id);
+      else setBill((b) => (b?.status === "PENDING" ? null : b));
+      reloadToday();
+    } else if (isBill(r.sale)) {
+      const sale = r.sale;
+      setBill(sale);
+      if (isDue(sale)) setPayAmount(String(Number(sale.total)));
+    }
     setLog((cur) => [{ id: Date.now(), heard: r.heard || r.command, reply: r.reply, by: r.understood_by }, ...cur].slice(0, 6));
     if (r.expects_reply) {
       followUntil.current = Date.now() + FOLLOWUP_MS;
@@ -101,7 +153,7 @@ export default function SoundboxPage() {
     }
     await say(r.audio, r.speech || r.reply);
     if (r.expects_reply) followUntil.current = Date.now() + FOLLOWUP_MS; // the clock starts after Saathi finishes asking
-  }, [say]);
+  }, [say, closeBill, reloadToday]);
 
   const handleUtterance = useCallback((wav: Blob) => {
     queue.current = queue.current.then(async () => {
@@ -171,8 +223,11 @@ export default function SoundboxPage() {
     const stop = startLive();
     const off = onLive((events) => {
       for (const e of events) {
+        if (e.kind === "COUNTER_UNDO") setBill((b) => (b?.id === e.data.sale_id ? null : b));
         if (e.kind !== "QR_PAYMENT") continue;
         if (e.data.sale_id) {
+          const paid = { status: "RECORDED", payment_mode: "UPI", payment_status: "PAID", bill_number: e.data.bill_number as string } as const;
+          setBill((b) => (b && b.id === e.data.sale_id ? { ...b, ...paid } : b));
           // The payment answered "paise diye ya udhaar?": stop waiting for a spoken answer.
           followUntil.current = 0;
           setAwaitingReply(false);
@@ -232,7 +287,9 @@ export default function SoundboxPage() {
     if (!amount) return;
     setPaying(true);
     try {
-      await api.soundboxPay(amount, "Customer (DEMO)");
+      // Paying the bill's amount pays that bill, like scanning its QR.
+      const forBill = shown && isDue(shown) && Number(amount) === Number(shown.total) ? shown.id : undefined;
+      await api.soundboxPay(amount, "Customer (DEMO)", forBill);
       setPayAmount("");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
@@ -244,13 +301,13 @@ export default function SoundboxPage() {
   const undo = async (entry: Entry) => {
     try {
       await api.soundboxUndo(entry.id);
+      closeBill(entry.id);
       setScreen({ big: "Undo", small: `${entry.bill_number} hata diya`, tone: "warn" });
     } catch (e) {
       setError(e instanceof ApiError ? e.message : String(e));
     }
   };
 
-  const t = today.data;
   const ring = phase === "hearing" ? "ring-cyan" : phase === "checking" || phase === "thinking" ? "ring-amber" : phase === "speaking" ? "ring-green" : "ring-white/10";
 
   return (
@@ -272,8 +329,12 @@ export default function SoundboxPage() {
           <div className="card overflow-hidden">
             <div className="flex items-center justify-between bg-navy px-6 py-4 text-white">
               <span className="text-2xl font-black tracking-tight">Pay<span className="text-cyan">tm</span></span>
-              <span className="text-sm font-bold text-[#C9DDF5]">Accepted here</span>
+              <span className="text-sm font-bold text-[#C9DDF5]">{shown ? "Your bill" : "Accepted here"}</span>
             </div>
+            {shown ? (
+              <BillCard key={shown.id} bill={shown} qr={billImage} shop={qr.data?.shop_name ?? session?.merchant.display_name ?? ""}
+                onClose={() => closeBill(shown.id)} />
+            ) : (
             <div className="flex flex-col items-center px-6 pt-6 pb-5">
               <p className="text-center text-lg font-extrabold">{qr.data?.shop_name ?? session?.merchant.display_name}</p>
               <p className="mb-4 text-xs text-muted">{qr.data?.upi_label}</p>
@@ -289,6 +350,7 @@ export default function SoundboxPage() {
                 {["UPI", "Paytm", "RuPay", "BHIM"].map((x) => <span key={x} className="rounded-md border border-line px-2 py-1 text-[11px] font-bold text-ink-soft">{x}</span>)}
               </div>
             </div>
+            )}
             <div className="border-t border-line bg-bg px-5 py-4">
               <p className="mb-2 text-xs font-bold text-ink-soft">No phone handy? Simulate a customer payment</p>
               <div className="flex gap-2">
@@ -421,6 +483,67 @@ export default function SoundboxPage() {
       </main>
 
       {!started && <StartOverlay onStart={() => void start()} />}
+    </div>
+  );
+}
+
+function BillCard({ bill, qr, shop, onClose }: { bill: Entry; qr: string | null; shop: string; onClose: () => void }) {
+  const due = isDue(bill);
+  return (
+    <div className="reply-in px-6 pt-5 pb-5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-lg font-extrabold">{shop}</p>
+          <p className="num truncate text-xs text-muted">{bill.bill_number ?? "New bill"} · {bill.customer_name ?? "Walk-in"}</p>
+        </div>
+        <button onClick={onClose} aria-label="Close the bill and show the shop QR" className="-mt-1 -mr-2 rounded-lg p-2 text-muted hover:bg-bg">
+          <X className="size-4" />
+        </button>
+      </div>
+      <table className="num mt-4 w-full text-sm">
+        <thead className="text-left text-[11px] text-muted">
+          <tr className="border-b border-line"><th className="py-1.5 font-semibold">Item</th><th className="text-right font-semibold">Qty</th>
+            <th className="text-right font-semibold">Rate</th><th className="text-right font-semibold">Amount</th></tr>
+        </thead>
+        <tbody>
+          {bill.lines.map((l) => (
+            <tr key={l.product_id} className="border-b border-[#F1F4F8]">
+              <td className="py-2 pr-2"><p className="font-bold">{l.name}</p><p className="text-[11px] text-muted">{l.pack_label}</p></td>
+              <td className="text-right">×{l.packs}</td>
+              <td className="pl-2 text-right text-ink-soft">{rupees(l.unit_price)}</td>
+              <td className="pl-2 text-right font-bold">{rupees(l.amount)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 flex items-baseline justify-between">
+        <span className="font-bold text-ink-soft">Total</span>
+        <span className="num text-3xl font-black text-navy">{rupees(bill.total)}</span>
+      </div>
+      {due ? (
+        <div className="mt-4 flex flex-col items-center">
+          <div className="rounded-3xl border-4 border-cyan p-2.5">
+            {qr
+              // eslint-disable-next-line @next/next/no-img-element -- a generated data: URL, nothing for next/image to optimise
+              ? <img src={qr} alt={`Payment QR for ${rupees(bill.total)} (demo)`} className="size-44 sm:size-52" />
+              : <div className="shimmer size-44 rounded-2xl sm:size-52" />}
+          </div>
+          <p className="mt-3 flex items-center gap-1.5 text-sm font-bold text-navy"><ScanLine className="size-4 text-cyan" /> Scan to pay {rupees(bill.total)}</p>
+          <p className="mt-1 text-center text-[11px] text-muted">
+            {bill.status === "PENDING" ? "Or tell Saathi: cash, or udhaar" : "UPI awaited · paying this QR closes the bill"}
+          </p>
+        </div>
+      ) : bill.payment_mode === "UDHAAR" ? (
+        <div className="toast-in mt-5 flex items-center gap-3 rounded-2xl bg-amber-soft p-4">
+          <BookOpen className="size-8 shrink-0 text-amber" />
+          <p className="text-sm font-bold">Written in {bill.customer_name}&apos;s khata</p>
+        </div>
+      ) : (
+        <div className="toast-in mt-5 flex items-center gap-3 rounded-2xl bg-green-soft p-4">
+          <CheckCircle2 className="size-8 shrink-0 text-green" />
+          <p className="text-sm font-bold">Paid · {MODE_LABEL[bill.payment_mode ?? ""] ?? "Cash"}</p>
+        </div>
+      )}
     </div>
   );
 }

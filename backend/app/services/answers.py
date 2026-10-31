@@ -17,7 +17,7 @@ from app.adapters import sarvam
 from app.models import Invoice, Plan, Task, today_ist
 from app.security import Ctx
 from app.services import brief as brief_service
-from app.services import growth
+from app.services import growth, profit, sourcing
 from app.services.bills import ALIASES
 from app.services.restock_flow import inventory_snapshot, sales_summary
 from app.services.states import UNPAID
@@ -29,6 +29,10 @@ ACTION = re.compile(r"\b(karo|kar\s+do|kardo|bhejo|bhej\s+do|arrange|order\s+kar
 STOCK_WORDS = re.compile(r"\b(stock|bacha|bache|bachi|baki\s+hai|kitna\s+hai|kitne\s+hai|inventory|maal|available|"
                          r"packs?|kitna\s+pada)\b", re.I)
 DUES_WORDS = re.compile(r"\b(baaki|baki|udhaar|udhar|dues?|pending|owe|lena|dena|outstanding)\b", re.I)
+PROFIT_WORDS = re.compile(r"\b(munafa|munaafa|profit|margin|faayda|fayda|faida|kamaya|kamai)\b", re.I)
+WEEK_WORDS = re.compile(r"\b(hafte|hafta|week|weekly)\b", re.I)
+SOURCING_WORDS = re.compile(r"\b(vendors?|suppliers?|distributors?|kahan\s+se|kaha\s+se|kis\s+se|kisse|sasta|saste|sasti|"
+                            r"brands?|company|companies|kaunsa\s+brand|best\s+deal|kharid\w*|mangwa\w*)\b", re.I)
 SALES_WORDS = re.compile(r"\b(sale|sales|bikri|bika|bike|becha|kamai|revenue|munafa|margin|profit)\b", re.I)
 CASH_WORDS = re.compile(r"\b(cash|paisa|paise|balance)\b", re.I)
 APPROVAL_WORDS = re.compile(r"\b(approvals?|approve|manzoori|pending\s+kaam|tasks?)\b", re.I)
@@ -61,6 +65,10 @@ def quick_answer(db: Session, ctx: Ctx, text: str) -> tuple[str, list[str]] | No
     sales = sales_summary(db, mid)
 
     product = _product_in(text, [p for p, _ in snapshot])
+    if product is not None and SOURCING_WORDS.search(text) and not PROFIT_WORDS.search(text):
+        return sourcing.spoken_comparison(db, mid, product), []
+    if PROFIT_WORDS.search(text) and (product is not None or not WEEK_WORDS.search(text)):
+        return profit_answer(db, mid, product), []
     if product is not None and (STOCK_WORDS.search(text) or QUESTION.search(text)) and not SALES_WORDS.search(text):
         inv = next(i for p, i in snapshot if p.id == product.id)
         weeks = sales.get(str(product.id), {}).get("weeks", [])
@@ -136,6 +144,34 @@ def quick_answer(db: Session, ctx: Ctx, text: str) -> tuple[str, list[str]] | No
     return None
 
 
+def profit_answer(db: Session, merchant_id, product=None) -> str:
+    """How much profit: one item, or the whole shop, since the start of the 4-week sales window."""
+    rep = profit.report(db, merchant_id)
+    since = f"{rep['period_from']:%d %b} se"
+    if product is not None:
+        i = profit.item(db, merchant_id, product.id)
+        if i is None or i["packs_sold"] == 0:
+            return f"{since} {product.name} ki koi bikri record nahi hui."
+        if i["profit"] is None:
+            return f"{product.name}: {i['packs_sold']} pack bike, {_r(i['revenue'])} ki bikri. Laagat (cost price) record mein nahi hai."
+        msg = (f"{since} {product.name} ke {i['packs_sold']} pack bike: bikri {_r(i['revenue'])}, laagat {_r(i['cost'])}, "
+               f"munafa {_r(i['profit'])}, yaani {_r(i['profit_per_pack'])} har pack.")
+        if i["counter_packs"]:
+            msg += f" Inme {i['counter_packs']} counter (Soundbox) ke bills hain."
+        if i["estimated"]:
+            msg += " Kuch stock ki kharid record mein nahi thi, uski laagat andaaze se li."
+        if i["cost_price"]:
+            msg += f" Abhi ka cost price {_r(i['cost_price'])}, bechne ka {_r(i['sell_price'])}."
+        return msg
+    if rep["profit"] is None:
+        return f"{since} bikri {_r(rep['revenue'])} hui. Kuch items ka cost price nahi hai, isliye kul munafa nahi bata sakta."
+    top = [i for i in rep["items"] if i["profit"] and Decimal(i["profit"]) > 0][:3]
+    msg = f"{since} kul munafa {_r(rep['profit'])}, {_r(rep['revenue'])} ki bikri par ({Decimal(rep['margin_pct']):.0f}%)."
+    if top:
+        msg += " Sabse zyada: " + ", ".join(f"{i['name']} {_r(i['profit'])}" for i in top) + "."
+    return msg
+
+
 def snapshot(db: Session, ctx: Ctx) -> dict:
     """Compact, merchant-scoped facts for the model. Only this merchant's records."""
     mid = ctx.merchant_id
@@ -165,6 +201,12 @@ def snapshot(db: Session, ctx: Ctx) -> dict:
         "slow_items": [{"item": i["name"], "packs": i["stock"], "sold_last_week": i["last_week"]}
                        for i in growth.slow_movers(db, mid)],
         "festival": {"name": festival["name"], "days_left": festival["days_left"]} if festival else None,
+        "profit_since": f"{(rep := profit.report(db, mid))['period_from']}",
+        "profit_rupees": rep["profit"] and f"{Decimal(rep['profit']):.0f}",
+        "profit_by_item": [{"item": i["name"], "brand": i["brand"], "packs_sold": i["packs_sold"],
+                            "profit_rupees": i["profit"] and f"{Decimal(i['profit']):.0f}",
+                            "cost_price": i["cost_price"] and f"{Decimal(i['cost_price']):.0f}",
+                            "sell_price": f"{Decimal(i['sell_price']):.0f}"} for i in rep["items"]],
         "waiting_for_approval": [{"task": t.title, "rupees": f"{plans[t.id].total:.0f}" if plans.get(t.id) else None}
                                  for t in waiting],
     }

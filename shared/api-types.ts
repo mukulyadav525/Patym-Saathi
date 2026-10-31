@@ -862,6 +862,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/{product_id}/sourcing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compare Vendors */
+        get: operations["compare_vendors_api_v1_products__product_id__sourcing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/purchases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buy
+         * @description Drafts the purchase and asks for approval. Nothing is ordered until the merchant approves it.
+         */
+        post: operations["buy_api_v1_purchases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/profit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Profit Report */
+        get: operations["profit_report_api_v1_profit_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/soundbox/listen": {
         parameters: {
             query?: never;
@@ -1374,6 +1428,36 @@ export interface components {
             /** Amount */
             amount: string;
         };
+        /** CounterLineOut */
+        CounterLineOut: {
+            /** Product Id */
+            product_id: string;
+            /**
+             * Sku
+             * @default
+             */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+            /**
+             * Cost
+             * @description What these packs cost the shop (oldest stock first)
+             */
+            cost?: string | null;
+            /**
+             * Cost Estimated
+             * @default false
+             */
+            cost_estimated: boolean;
+        };
         /** CounterSaleOut */
         CounterSaleOut: {
             /** Id */
@@ -1388,7 +1472,7 @@ export interface components {
             /** Customer Name */
             customer_name: string | null;
             /** Lines */
-            lines: components["schemas"]["CounterLine"][];
+            lines: components["schemas"]["CounterLineOut"][];
             /** Total */
             total: string;
             /** Payment Mode */
@@ -1574,6 +1658,23 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
+            /**
+             * Brand
+             * @default
+             */
+            brand: string;
+            /**
+             * Cost Price
+             * @description What the stock in hand cost per pack
+             */
+            cost_price?: string | null;
+            /**
+             * Cost Estimated
+             * @default false
+             */
+            cost_estimated: boolean;
+            /** Profit Per Pack */
+            profit_per_pack?: string | null;
         };
         /** InvoiceOut */
         InvoiceOut: {
@@ -1814,6 +1915,25 @@ export interface components {
             /** Next Cursor */
             next_cursor: string | null;
         };
+        /** PayBill */
+        PayBill: {
+            /** Id */
+            id: string;
+            /**
+             * Bill Number
+             * @description Given when the bill is recorded; a bill still being spoken has none
+             */
+            bill_number: string | null;
+            /** Lines */
+            lines: components["schemas"]["CounterLine"][];
+            /** Total */
+            total: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "DUE" | "PAID" | "ON_KHATA" | "CANCELLED";
+        };
         /** PayPageInfo */
         PayPageInfo: {
             /** Shop Name */
@@ -1822,6 +1942,7 @@ export interface components {
             locality: string;
             /** Mode */
             mode: string;
+            bill?: components["schemas"]["PayBill"] | null;
         };
         /** PlanDiff */
         PlanDiff: {
@@ -1866,6 +1987,10 @@ export interface components {
             status: string;
             /** Uplift */
             uplift?: string | null;
+            /** Brand */
+            brand?: string | null;
+            /** Quality */
+            quality?: string | null;
         };
         /** PlanOut */
         PlanOut: {
@@ -1906,11 +2031,103 @@ export interface components {
             festival_evidence: {
                 [key: string]: unknown;
             }[];
+            purchase?: components["schemas"]["PlanPurchase"] | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * PlanPurchase
+         * @description A purchase picked in Compare vendors: what changes for the item when its goods arrive.
+         */
+        PlanPurchase: {
+            /** Product Id */
+            product_id: string;
+            /** Brand */
+            brand: string;
+            /** Quality */
+            quality: string;
+            /** From Brand */
+            from_brand: string;
+            /** Sell Price */
+            sell_price: string;
+            /** From Sell Price */
+            from_sell_price: string;
+        };
+        /** ProfitItem */
+        ProfitItem: {
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Brand */
+            brand: string;
+            /** Sell Price */
+            sell_price: string;
+            /** Cost Price */
+            cost_price: string | null;
+            /** Packs Sold */
+            packs_sold: number;
+            /** Counter Packs */
+            counter_packs: number;
+            /** Revenue */
+            revenue: string;
+            /** Cost */
+            cost: string | null;
+            /** Profit */
+            profit: string | null;
+            /** Margin Pct */
+            margin_pct: string | null;
+            /** Profit Per Pack */
+            profit_per_pack: string | null;
+            /** Estimated */
+            estimated: boolean;
+        };
+        /** ProfitReport */
+        ProfitReport: {
+            /**
+             * Period From
+             * Format: date
+             */
+            period_from: string;
+            /**
+             * Period To
+             * Format: date
+             */
+            period_to: string;
+            /** Revenue */
+            revenue: string;
+            /** Cost */
+            cost: string | null;
+            /** Profit */
+            profit: string | null;
+            /** Margin Pct */
+            margin_pct: string | null;
+            /** Items */
+            items: components["schemas"]["ProfitItem"][];
+            /** Sources */
+            sources: string[];
+            /** Notes */
+            notes: string[];
+        };
+        /** PurchaseIn */
+        PurchaseIn: {
+            /**
+             * Quote Id
+             * Format: uuid
+             */
+            quote_id: string;
+            /** Packs */
+            packs: number;
+            /**
+             * Sell Price
+             * @description New selling price once the goods arrive
+             */
+            sell_price?: string | null;
         };
         /** QrPaymentIn */
         QrPaymentIn: {
@@ -1921,6 +2138,11 @@ export interface components {
              * @default
              */
             payer: string;
+            /**
+             * Sale Id
+             * @description The bill this pays (its QR); the amount must match
+             */
+            sale_id?: string | null;
         };
         /** QrPaymentOut */
         QrPaymentOut: {
@@ -2187,6 +2409,41 @@ export interface components {
             /** Payments */
             payments: components["schemas"]["QrPaymentOut"][];
         };
+        /** SourcingOut */
+        SourcingOut: {
+            /** Product Id */
+            product_id: string;
+            /** Name */
+            name: string;
+            /** Name Hi */
+            name_hi: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Brand */
+            brand: string;
+            /** Sell Price */
+            sell_price: string;
+            /** Cost Price */
+            cost_price: string | null;
+            /** Cost Estimated */
+            cost_estimated: boolean;
+            /** Profit Per Pack */
+            profit_per_pack: string | null;
+            /** Stock */
+            stock: number;
+            /** Avg Weekly */
+            avg_weekly: string;
+            /** Suggested Packs */
+            suggested_packs: number;
+            /** Offers */
+            offers: components["schemas"]["VendorOffer"][];
+            /** Recommendation */
+            recommendation: string;
+            /** Notes */
+            notes: string[];
+            /** Sources */
+            sources: string[];
+        };
         /** SpeechOut */
         SpeechOut: {
             /** Text */
@@ -2357,6 +2614,57 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** VendorOffer */
+        VendorOffer: {
+            /** Quote Id */
+            quote_id: string;
+            /** Supplier Name */
+            supplier_name: string;
+            /** Connector Mode */
+            connector_mode: string;
+            /** Brand */
+            brand: string;
+            /**
+             * Quality
+             * @enum {string}
+             */
+            quality: "PREMIUM" | "STANDARD" | "ECONOMY";
+            /** Quality Note */
+            quality_note: string;
+            /** Cost Price */
+            cost_price: string;
+            /** Mrp */
+            mrp: string | null;
+            /**
+             * Sell Price
+             * @description Your price for the brand you stock; else what nearby shops charge. Never above MRP
+             */
+            sell_price: string;
+            /** Profit Per Pack */
+            profit_per_pack: string;
+            /** Margin Pct */
+            margin_pct: string;
+            /**
+             * Monthly Profit
+             * @description Profit per pack x your usual weekly sales x 4
+             */
+            monthly_profit: string;
+            /** Available Packs */
+            available_packs: number;
+            /** Min Order Packs */
+            min_order_packs: number;
+            /** Eta */
+            eta: string;
+            /** Current Brand */
+            current_brand: boolean;
+            /**
+             * Best
+             * @description Most profit per pack among offers available now
+             */
+            best: boolean;
+            /** Cheapest For Current */
+            cheapest_for_current: boolean;
         };
         /** WeekSales */
         WeekSales: {
@@ -4051,6 +4359,105 @@ export interface operations {
             };
         };
     };
+    compare_vendors_api_v1_products__product_id__sourcing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                product_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourcingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    buy_api_v1_purchases_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PurchaseIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    profit_report_api_v1_profit_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfitReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     listen_api_v1_soundbox_listen_post: {
         parameters: {
             query?: never;
@@ -4320,7 +4727,10 @@ export interface operations {
     };
     pay_info_api_v1_pay__token__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description A bill's own QR: show that bill */
+                bill?: string | null;
+            };
             header?: never;
             path: {
                 token: string;

@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Badge, Button, Card, Divider, Empty, ErrorState, Loading, Row, Screen, TopBar, Txt, styles as ui } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -8,9 +8,11 @@ import { colors } from "@/lib/theme";
 
 export default function InventoryScreen() {
   const { data, error, loading, refreshing, reload } = useLoad(api.inventory);
+  const profit = useLoad(api.profit);
   const low = (data ?? []).filter((i) => i.low);
+  const p = profit.data;
   return (
-    <Screen refreshing={refreshing} onRefresh={reload}>
+    <Screen refreshing={refreshing} onRefresh={() => { reload(); profit.reload(); }}>
       <TopBar title="Stock & alerts" />
       {loading && !data ? <Loading /> : error && !data ? <ErrorState error={error} onRetry={reload} /> : !data?.length ? (
         <Empty icon="layers-outline" title="No stock records" body="Connect POS or add items to see stock." />
@@ -24,14 +26,31 @@ export default function InventoryScreen() {
                 onPress={() => router.navigate({ pathname: "/saathi/assistant", params: { prompt: "restock" } })} />
             </Card>
           )}
+          {p?.profit && (
+            <Card>
+              <Txt style={[ui.muted, { fontSize: 12 }]}>Profit since {new Date(p.period_from).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</Txt>
+              <Txt style={{ fontSize: 26, fontWeight: "800", color: colors.green, marginTop: 2 }}>{rupees(p.profit)}</Txt>
+              <Txt style={ui.muted}>on {rupees(p.revenue)} sales{p.margin_pct ? ` · ${Number(p.margin_pct).toFixed(1)}% margin` : ""}</Txt>
+              <Txt style={[ui.muted, { fontSize: 11, marginTop: 6 }]}>Ask Saathi: “Atta pe kitna munafa hua?”</Txt>
+            </Card>
+          )}
           <Card>
             {data.map((i, idx) => (
               <View key={i.product_id}>
                 {idx > 0 && <Divider />}
+                <Pressable onPress={() => router.push({ pathname: "/sourcing/[id]", params: { id: i.product_id } })}
+                  accessibilityRole="button" accessibilityLabel={`${i.name}: compare vendors`}
+                  style={({ pressed }) => pressed && { opacity: 0.7 }}>
                 <Row>
                   <View style={{ flex: 1 }}>
                     <Txt style={ui.h3}>{i.name} <Txt style={ui.muted}>{i.name_hi}</Txt></Txt>
-                    <Txt style={ui.muted}>{i.pack_label} · sells {rupees(i.sell_price)} · ~{i.avg_weekly}/week</Txt>
+                    {!!i.brand && <Txt style={[ui.muted, { color: colors.inkSoft }]}>{i.brand}</Txt>}
+                    <Txt style={ui.muted}>{i.pack_label} · cost {rupees(i.cost_price, Number(i.cost_price) % 1 ? 2 : 0)} · sells {rupees(i.sell_price)} · ~{i.avg_weekly}/week</Txt>
+                    {i.profit_per_pack && (
+                      <Txt style={{ fontSize: 12, fontWeight: "700", color: Number(i.profit_per_pack) < 0 ? colors.red : colors.green }}>
+                        {rupees(i.profit_per_pack, Number(i.profit_per_pack) % 1 ? 2 : 0)} profit / pack
+                      </Txt>
+                    )}
                   </View>
                   <View style={{ alignItems: "flex-end" }}>
                     <Txt style={{ fontSize: 20, fontWeight: "800", color: i.low ? colors.red : colors.ink }}>{i.usable_packs}</Txt>
@@ -41,8 +60,10 @@ export default function InventoryScreen() {
                 <Row style={{ gap: 6, marginTop: 6 }}>
                   {i.low && <Badge label="Low" tone="red" icon="warning-outline" />}
                   <Badge label={i.source} tone={i.source === "SAMPLE" ? "violet" : "green"} />
-                  <Txt style={[ui.muted, { fontSize: 11 }]}>updated {timeAgo(i.updated_at)}</Txt>
+                  <Txt style={[ui.muted, { fontSize: 11, flex: 1 }]}>updated {timeAgo(i.updated_at)}</Txt>
+                  <Txt style={{ fontSize: 12, fontWeight: "700", color: colors.navy }}>Compare vendors ›</Txt>
                 </Row>
+                </Pressable>
               </View>
             ))}
           </Card>

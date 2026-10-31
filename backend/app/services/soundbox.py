@@ -46,7 +46,7 @@ from app.models import (
     utcnow,
 )
 from app.security import Ctx
-from app.services import answers, audit, live
+from app.services import answers, audit, live, profit
 from app.services.bills import ALIASES
 
 PENDING_TTL = timedelta(minutes=2)        # an unanswered question expires
@@ -281,6 +281,13 @@ def parse(command: str, products: list[Product], customers: list[str]) -> Parsed
     # How the customer paid decides which book an entry goes into, so it comes only from words actually said
     # ("udhaar", "cash", "UPI", "paise de diye"). The model tends to fill a guess in; a guess asks instead.
     parsed.payment = _payment_from_words(command)
+    # A quantity said in words before the item ("teen atta") wins: the model sometimes reads Hindi numbers as 1.
+    heard = {i.said: i for i in _rules_parse(command, products, customers).items if (i.quantity, i.unit) != (1, "pack")}
+    for item in parsed.items:
+        product = match_product(item.said, products)
+        spoken = heard.get(product.name) if product else None
+        if spoken is not None:
+            item.quantity, item.unit = spoken.quantity, spoken.unit
     return parsed
 
 
@@ -525,6 +532,9 @@ def _ask(db: Session, sale: CounterSale, question: str, options: list[str], hear
     text_ = QUESTIONS[question].format(**fmt)
     if question == "CUSTOMER":
         text_ += " " + " ya ".join(options) + "?"
+    if question in {"PAYMENT", "PAYMENT_NOW"} and sale.kind == "SALE":
+        # The bill is complete: say the total (the Soundbox shows the bill and its QR meanwhile).
+        text_ = f"{_items_text(sale.lines, spoken=True)}: kul {r(sale.total)}. {text_}"
     db.commit()
     return _result("ASKED", text_, heard=heard, command=command, sale=sale, expects_reply=True, by=sale.understood_by)
 
@@ -713,14 +723,23 @@ def _record(db: Session, ctx: Ctx, sale: CounterSale, mode: str, status: str, qr
     now = utcnow()
     notes: list[str] = list((sale.applied or {}).get("notes", []))
     sale.bill_number = _next_bill(db, mid)
-    applied: dict = {"stock": []}
+    applied: dict = {"stock": [], "lots": []}
 
     if sale.kind in {"SALE", "RETURN"}:
+        costed_lines = []
         for ln in sale.lines:
+            ln = dict(ln)
+            costed_lines.append(ln)
             inv = db.scalars(select(Inventory).where(Inventory.merchant_id == mid,
                                                      Inventory.product_id == uuid.UUID(ln["product_id"])).with_for_update()).first()
             if inv is None:
                 continue
+            # The bill keeps what its packs cost (oldest stock first), so profit is exact per sale.
+            product = db.get(Product, uuid.UUID(ln["product_id"]))
+            costed = (profit.take if sale.kind == "SALE" else profit.put_back)(db, mid, product, ln["packs"])
+            applied["lots"] += costed.moves
+            ln["cost"] = f"{costed.cost:.2f}" if costed.cost is not None else None
+            ln["cost_estimated"] = costed.estimated
             if sale.kind == "SALE":
                 take = min(ln["packs"], inv.on_hand_packs)
                 inv.on_hand_packs -= take
@@ -735,6 +754,7 @@ def _record(db: Session, ctx: Ctx, sale: CounterSale, mode: str, status: str, qr
                 inv.on_hand_packs += ln["packs"]
                 applied["stock"].append({"product_id": ln["product_id"], "delta": ln["packs"]})
             inv.updated_at = now
+        sale.lines = costed_lines
 
     entry = None
     if sale.kind == "SALE" and mode == "UDHAAR":
@@ -818,6 +838,7 @@ def undo(db: Session, ctx: Ctx, sale: CounterSale) -> str:
         if inv is not None:
             inv.on_hand_packs = max(0, inv.on_hand_packs - move["delta"])
             inv.updated_at = utcnow()
+    profit.revert(db, mid, applied.get("lots", []))
     if applied.get("khata_entry_id"):
         entry = db.get(KhataEntry, uuid.UUID(applied["khata_entry_id"]))
         if entry is not None and entry.merchant_id == mid:
@@ -840,36 +861,77 @@ def undo(db: Session, ctx: Ctx, sale: CounterSale) -> str:
 
 # --------------------------------------------------------------------------------------------- QR payments
 
-def receive_qr_payment(db: Session, merchant: Merchant, amount: Decimal, payer: str, actor: str) -> QrPayment:
-    """A payment to the shop QR (DEMO). Links to the counter entry it pays for when the amount matches one
-    waiting for payment, then the Soundbox announces it."""
+def bill_status(sale: CounterSale) -> str:
+    """Where a counter bill stands for the customer holding its QR."""
+    if sale.status == "CANCELLED":
+        return "CANCELLED"
+    if sale.status == "PENDING" or sale.payment_status == "AWAITED":
+        return "DUE"
+    return "ON_KHATA" if sale.payment_status == "ON_KHATA" else "PAID"
+
+
+def find_bill(db: Session, merchant_id: uuid.UUID, sale_id: uuid.UUID, *, lock: bool = False) -> CounterSale:
+    q = select(CounterSale).where(CounterSale.id == sale_id, CounterSale.merchant_id == merchant_id, CounterSale.kind == "SALE")
+    bill = db.scalars(q.with_for_update() if lock else q).first()
+    if bill is None:
+        raise ApiError(404, "NOT_FOUND", "Bill not found")
+    return bill
+
+
+def bill_dict(sale: CounterSale) -> dict:
+    """The bill as its QR's pay page shows it (no customer name: whoever holds the QR sees only what they pay for)."""
+    shown = ("product_id", "sku", "name", "pack_label", "packs", "unit_price", "amount")  # never the shop's cost price
+    return {"id": str(sale.id), "bill_number": sale.bill_number, "lines": [{k: ln.get(k) for k in shown} for ln in sale.lines],
+            "total": f"{sale.total:.2f}", "status": bill_status(sale)}
+
+
+BILL_CLOSED = {"PAID": "This bill is already paid", "ON_KHATA": "This bill was written in the khata",
+               "CANCELLED": "This bill was cancelled"}
+
+
+def receive_qr_payment(db: Session, merchant: Merchant, amount: Decimal, payer: str, actor: str,
+                       sale_id: uuid.UUID | None = None) -> QrPayment:
+    """A payment to the shop QR (DEMO). A bill's own QR (`sale_id`) pays exactly that bill; the plain shop QR
+    links to the counter entry whose amount matches one waiting for payment. Then the Soundbox announces it."""
     if amount <= 0 or amount > MAX_AMOUNT:
         raise ApiError(422, "BAD_AMOUNT", "Amount must be between ₹1 and ₹1,00,000")
     mid = merchant.id
+    bill = find_bill(db, mid, sale_id, lock=True) if sale_id else None
+    if bill is not None:
+        status = bill_status(bill)
+        if status != "DUE":
+            raise ApiError(409, "BILL_" + status, BILL_CLOSED[status])
+        if bill.total != amount:
+            raise ApiError(422, "AMOUNT_MISMATCH", f"This bill is for {r(bill.total)}")
     qr = QrPayment(merchant_id=mid, amount=amount, payer=payer.strip()[:60], txn_id="DEMO" + secrets.token_hex(8).upper(), mode="DEMO")
     db.add(qr)
     db.flush()
     now = utcnow()
     linked: CounterSale | None = None
-    waiting = db.scalars(select(CounterSale).where(
-        CounterSale.merchant_id == mid, CounterSale.status == "PENDING", CounterSale.total == amount,
-        CounterSale.question.in_(("PAYMENT", "PAYMENT_NOW")), CounterSale.created_at > now - PENDING_TTL)
-        .order_by(CounterSale.created_at.desc()).limit(1).with_for_update()).first()
+    waiting = awaited = None
+    if bill is not None:
+        # The bill's QR settles it even while Saathi is still asking (which customer, paid or udhaar).
+        waiting, awaited = (bill, None) if bill.status == "PENDING" else (None, bill)
+    else:
+        waiting = db.scalars(select(CounterSale).where(
+            CounterSale.merchant_id == mid, CounterSale.status == "PENDING", CounterSale.total == amount,
+            CounterSale.question.in_(("PAYMENT", "PAYMENT_NOW")), CounterSale.created_at > now - PENDING_TTL)
+            .order_by(CounterSale.created_at.desc()).limit(1).with_for_update()).first()
+        if waiting is None:
+            awaited = db.scalars(select(CounterSale).where(
+                CounterSale.merchant_id == mid, CounterSale.status == "RECORDED", CounterSale.payment_status == "AWAITED",
+                CounterSale.total == amount, CounterSale.recorded_at > now - AWAIT_WINDOW)
+                .order_by(CounterSale.recorded_at.desc()).limit(1).with_for_update()).first()
     if waiting is not None:
         # The question "paise diye ya udhaar?" is answered by the payment itself.
         ctx = _system_ctx(db, merchant, waiting.created_by)
         waiting.applied = {**(waiting.applied or {}), "want": "UPI"}
         _record(db, ctx, waiting, "UPI", "PAID", qr, "", "")
         linked = waiting
-    else:
-        awaited = db.scalars(select(CounterSale).where(
-            CounterSale.merchant_id == mid, CounterSale.status == "RECORDED", CounterSale.payment_status == "AWAITED",
-            CounterSale.total == amount, CounterSale.recorded_at > now - AWAIT_WINDOW)
-            .order_by(CounterSale.recorded_at.desc()).limit(1).with_for_update()).first()
-        if awaited is not None:
-            qr.sale_id, awaited.qr_payment_id, awaited.payment_status = awaited.id, qr.id, "PAID"
-            awaited.applied = {**(awaited.applied or {}), "qr_payment_id": str(qr.id)}
-            linked = awaited
+    elif awaited is not None:
+        qr.sale_id, awaited.qr_payment_id, awaited.payment_status = awaited.id, qr.id, "PAID"
+        awaited.applied = {**(awaited.applied or {}), "qr_payment_id": str(qr.id)}
+        linked = awaited
 
     announce = f"Paytm par {amount:,.0f} rupaye prapt hue."
     if linked is not None and linked.customer_name:

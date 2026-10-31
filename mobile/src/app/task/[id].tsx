@@ -229,7 +229,7 @@ function PlanBlock({ task, awaiting }: { task: TaskDetail; awaiting: boolean }) 
               <View style={{ flex: 1 }}>
                 <Txt style={{ fontWeight: "700" }}>{l.name}</Txt>
                 <Txt style={[ui.muted, { fontSize: 11 }]}>
-                  {l.pack_label} · {rupees(l.unit_price)} · {l.supplier_name.split(" ")[0]}
+                  {l.pack_label}{l.brand ? ` · ${l.brand}` : ""} · {rupees(l.unit_price)} · {l.supplier_name.split(" ")[0]}
                 </Txt>
                 {l.uplift && Number(l.uplift) > 1 && (
                   <Txt style={{ fontSize: 11, fontWeight: "800", color: colors.amber }}>{plan.festival} ×{Number(l.uplift).toFixed(1)}</Txt>

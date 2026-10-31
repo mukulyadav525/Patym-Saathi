@@ -172,6 +172,10 @@ export const api = {
   tasks: () => request<TaskSummary[]>("GET", "/api/v1/tasks"),
   task: (id: string) => request<TaskDetail>("GET", `/api/v1/tasks/${id}`),
   inventory: () => request<InventoryItem[]>("GET", "/api/v1/inventory"),
+  sourcing: (productId: string) => request<S["SourcingOut"]>("GET", `/api/v1/products/${productId}/sourcing`),
+  buy: (quoteId: string, packs: number, sellPrice: string) =>
+    request<TaskDetail>("POST", "/api/v1/purchases", { quote_id: quoteId, packs, sell_price: sellPrice }),
+  profit: () => request<S["ProfitReport"]>("GET", "/api/v1/profit"),
   invoices: () => request<Invoice[]>("GET", "/api/v1/invoices"),
   orders: () => request<Order[]>("GET", "/api/v1/orders"),
   approvals: () => request<Approval[]>("GET", "/api/v1/approvals"),

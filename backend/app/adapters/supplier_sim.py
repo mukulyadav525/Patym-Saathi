@@ -37,7 +37,9 @@ def submit(db: Session, supplier: Supplier, lines: list[OrderLine]) -> list[Line
     for line in lines:
         product = db.get(Product, line.product_id)
         quote = db.get(SupplierQuote, line.quote_id)
-        short = settings.demo_shortage and supplier.code == "A" and product.sku == fx.SHORTAGE_SKU
+        # The demo shortage is the brand the shop stocks; Supplier A's other oils are in stock.
+        short = (settings.demo_shortage and supplier.code == "A" and product.sku == fx.SHORTAGE_SKU
+                 and quote.brand in ("", fx.CURRENT_BRANDS[fx.SHORTAGE_SKU][0]))
         if short or quote.available_packs < line.packs:
             # Supplier reports the item out of stock; its quote now shows zero availability.
             quote.available_packs = 0

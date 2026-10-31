@@ -33,6 +33,40 @@ PRODUCTS = [
     ("HAIROIL", "Hair oil", "बालों का तेल", "200 ml", 18, [3, 2, 1, 0], "78", "82", "95"),
 ]
 
+# Vendor price lists (SAMPLE; brand names are made up). The brand the shop stocks now, which both suppliers quote
+# at the prices above: sku: (brand, quality, what sets it apart, MRP)
+CURRENT_BRANDS = {
+    "ATTA10": ("Shree Chakki Atta", "STANDARD", "Whole wheat, chakki ground", "440"),
+    "RICE5": ("Rasoi Kolam Rice", "STANDARD", "Everyday kolam, 1 year aged", "360"),
+    "SUGAR1": ("Shubh Sugar", "STANDARD", "Refined white, M-30 grade", "50"),
+    "TOOR1": ("Shree Toor Dal", "STANDARD", "Polished, machine sorted", "180"),
+    "OIL1": ("SunGold Refined Oil", "STANDARD", "Refined sunflower, pouch", "195"),
+    "TEA250": ("Assam Gold CTC", "STANDARD", "Strong CTC, Assam blend", "160"),
+    "NOODLE12": ("Quick Masala Noodles", "STANDARD", "Maida, 2-minute masala", "140"),
+    "HAIROIL": ("Pure Coconut Hair Oil", "STANDARD", "100% coconut, bottle", "99"),
+}
+# Other brands and qualities the same suppliers offer:
+# sku: [(supplier code, brand, quality, what sets it apart, cost, MRP or None, what nearby shops sell it for, packs)]
+OTHER_OFFERS = {
+    "ATTA10": [("A", "Sharbati Select Atta", "PREMIUM", "MP sharbati wheat, softer rotis", "445", "520", "499", 20),
+               ("B", "Mill Fresh Loose Atta", "ECONOMY", "Local mill, loose-packed; shorter shelf life", "340", None, "375", 40)],
+    "RICE5": [("A", "Royal Basmati Rice", "PREMIUM", "Long-grain basmati, 2 years aged", "390", "475", "450", 15),
+              ("B", "Mandi Parmal Rice", "ECONOMY", "Parmal, unbranded sack", "270", None, "299", 40)],
+    "SUGAR1": [("B", "Crystal Sulphurless Sugar", "PREMIUM", "Sulphur-free, double refined", "50", "60", "58", 40),
+               ("A", "Loose Sugar (packed in shop)", "ECONOMY", "Bulk sack, packed at the counter", "39", None, "44", 60)],
+    "TOOR1": [("A", "Unpolished Toor Dal", "PREMIUM", "Unpolished, no oil coating", "172", "210", "199", 20),
+              ("B", "Loose Toor Dal", "ECONOMY", "Polished, loose sack", "138", None, "155", 40)],
+    "OIL1": [("B", "Cold-pressed Sunflower Oil", "PREMIUM", "Cold-pressed, bottle", "205", "260", "245", 15),
+             ("A", "Rice Bran Blend Oil", "ECONOMY", "Rice bran + palmolein blend", "128", "170", "160", 30)],
+    "TEA250": [("A", "Darjeeling Leaf Tea", "PREMIUM", "Whole leaf, Darjeeling", "160", "210", "195", 15),
+               ("B", "Chai Dust Loose", "ECONOMY", "Dust grade, loose", "105", None, "125", 30)],
+    "NOODLE12": [("B", "Value Masala Noodles", "ECONOMY", "Smaller cakes, value pack", "96", "120", "115", 30)],
+    "HAIROIL": [("A", "Herbal Amla Hair Oil", "PREMIUM", "Amla + coconut, bottle", "88", "120", "110", 20)],
+}
+# Stock on hand is what is left of one earlier purchase from Supplier A at its price, bought just before the
+# 4 weeks of sales history, so profit has real cost prices from the start.
+OPENING_LOT_SUPPLIER = "A"
+
 # Festival demand evidence: last Diwali week vs the 4 normal weeks before it (sample POS history).
 FESTIVAL = {"code": "DIWALI", "name": "Diwali", "name_hi": "दिवाली", "date": "2026-11-08", "last_date": "2025-10-20"}
 # sku: (packs sold in last year's Diwali week, normal weekly average before it)

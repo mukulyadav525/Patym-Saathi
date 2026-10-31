@@ -2,7 +2,7 @@
 
 import {
   Bell, BookOpen, Boxes, ClipboardList, History, Inbox, IndianRupee, LayoutDashboard, LogOut, Menu, Network, Receipt, ScanLine,
-  Speaker, Sparkles, Tag, Wallet, X,
+  Speaker, Sparkles, Tag, TrendingUp, Wallet, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -45,7 +45,8 @@ const NAV = [
   {
     group: "Business",
     items: [
-      { href: "/inventory", label: "Inventory", icon: Boxes },
+      { href: "/inventory", label: "Inventory & vendors", icon: Boxes },
+      { href: "/profit", label: "Profit by item", icon: TrendingUp },
       { href: "/orders", label: "Supplier orders", icon: ClipboardList },
       { href: "/connections", label: "Connections & consent", icon: Network },
     ],

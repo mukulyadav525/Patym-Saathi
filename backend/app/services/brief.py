@@ -7,7 +7,8 @@ from decimal import Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Invoice, Product, SalesWeekly, SupplierQuote, today_ist
+from app.models import Invoice, Product, SalesWeekly, today_ist
+from app.services import profit
 from app.services.restock import money
 from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary, sales_window
@@ -33,31 +34,26 @@ def last_week_sales(db: Session, merchant_id: uuid.UUID) -> dict:
     key = ("last_week_sales", merchant_id)
     if key in db.info:
         return db.info[key]
-    sales = sales_summary(db, merchant_id)
-    cheapest = dict(db.execute(
-        select(SupplierQuote.product_id, func.min(SupplierQuote.unit_price))
-        .join(Product, Product.id == SupplierQuote.product_id)
-        .where(Product.merchant_id == merchant_id).group_by(SupplierQuote.product_id)).all())
+    costs = profit.unit_costs(db, merchant_id)
     revenue = Decimal("0")
     margin = Decimal("0")
-    for product in db.scalars(select(Product).where(Product.merchant_id == merchant_id)):
-        weeks = sales.get(str(product.id), {}).get("weeks", [])
-        if not weeks:
-            continue
-        packs = weeks[-1]
-        revenue += product.sell_price * packs
-        if product.id in cheapest:
-            margin += (product.sell_price - cheapest[product.id]) * packs
+    last_week = sales_window()[-1]
+    for product_id, packs, price in db.execute(
+            select(SalesWeekly.product_id, SalesWeekly.packs_sold, profit.SOLD_AT).join(Product, Product.id == SalesWeekly.product_id)
+            .where(SalesWeekly.merchant_id == merchant_id, SalesWeekly.week_start == last_week)).all():
+        revenue += price * packs
+        if str(product_id) in costs:
+            margin += (price - costs[str(product_id)][0]) * packs
     db.info[key] = {"revenue": money(revenue), "gross_margin": money(margin)}
     return db.info[key]
 
 
 def weekly_sales(db: Session, merchant_id: uuid.UUID) -> list[dict]:
-    """Revenue per week (sell price x packs sold) for the last 4 completed weeks, oldest first; 0 for a week with
+    """Revenue per week (price sold at x packs sold) for the last 4 completed weeks, oldest first; 0 for a week with
     no records. Same window as every other sales figure."""
     window = sales_window()
     rows = db.execute(
-        select(SalesWeekly.week_start, func.sum(SalesWeekly.packs_sold * Product.sell_price), func.sum(SalesWeekly.packs_sold))
+        select(SalesWeekly.week_start, func.sum(SalesWeekly.packs_sold * profit.SOLD_AT), func.sum(SalesWeekly.packs_sold))
         .join(Product, Product.id == SalesWeekly.product_id)
         .where(SalesWeekly.merchant_id == merchant_id, SalesWeekly.week_start >= window[0],
                SalesWeekly.week_start <= window[-1])

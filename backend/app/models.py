@@ -105,6 +105,7 @@ class Product(Base):
     sell_price: Mapped[Decimal] = mapped_column(Money)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    brand: Mapped[str] = mapped_column(String(80), default="")  # the brand stocked now (changes when another arrives)
 
 
 class Inventory(Base):
@@ -133,6 +134,7 @@ class SalesWeekly(Base):
     packs_sold: Mapped[int] = mapped_column(Integer)
     source: Mapped[str] = mapped_column(String(20))  # SAMPLE | POS
     imported_at: Mapped[datetime] = ts()
+    unit_price: Mapped[Decimal | None] = mapped_column(Money, nullable=True)  # what it sold for that week
 
 
 class Supplier(Base):
@@ -156,6 +158,29 @@ class SupplierQuote(Base):
     eta: Mapped[str] = mapped_column(String(40), default="Next day")
     valid_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     fetched_at: Mapped[datetime] = ts()
+    brand: Mapped[str] = mapped_column(String(80), default="")
+    quality: Mapped[str] = mapped_column(String(20), default="STANDARD")  # PREMIUM | STANDARD | ECONOMY
+    quality_note: Mapped[str] = mapped_column(String(200), default="")
+    mrp: Mapped[Decimal | None] = mapped_column(Money, nullable=True)
+    typical_sell_price: Mapped[Decimal | None] = mapped_column(Money, nullable=True)  # what nearby shops charge
+
+
+class StockLot(Base):
+    """Packs bought at one cost price (a supplier order received, a supplier bill confirmed). Sales use up the
+    oldest lots first, so profit is the selling price minus what those packs actually cost."""
+    __tablename__ = "stock_lots"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    product_id: Mapped[uuid.UUID] = fk("products.id")
+    source: Mapped[str] = mapped_column(String(20))  # SAMPLE | ORDER | BILL | RETURN
+    supplier_name: Mapped[str] = mapped_column(String(120), default="")
+    brand: Mapped[str] = mapped_column(String(80), default="")
+    unit_cost: Mapped[Decimal] = mapped_column(Money)
+    packs_in: Mapped[int] = mapped_column(Integer)
+    packs_left: Mapped[int] = mapped_column(Integer)
+    order_id: Mapped[uuid.UUID | None] = fk("orders.id", nullable=True)
+    receipt_id: Mapped[uuid.UUID | None] = fk("goods_receipts.id", nullable=True)
+    received_at: Mapped[datetime] = ts()
 
 
 class DataConnection(Base):

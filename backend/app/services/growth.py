@@ -21,11 +21,10 @@ from app.models import (
     PeerBenchmark,
     Plan,
     Product,
-    SupplierQuote,
     Task,
     utcnow,
 )
-from app.services import audit, brief as brief_service, festivals, restock_flow
+from app.services import audit, brief as brief_service, festivals, profit, restock_flow
 from app.services.restock import festival_uplift, money
 from app.services.states import UNPAID
 from app.services.restock_flow import inventory_snapshot, sales_summary
@@ -58,17 +57,8 @@ def _inventory(db: Session, merchant_id: uuid.UUID):
 
 
 def _cheapest_quotes(db: Session, merchant_id: uuid.UUID) -> dict[str, Decimal]:
-    key = ("cheapest_quotes", merchant_id)
-    if key not in db.info:
-        db.info[key] = _cheapest_quotes_query(db, merchant_id)
-    return db.info[key]
-
-
-def _cheapest_quotes_query(db: Session, merchant_id: uuid.UUID) -> dict[str, Decimal]:
-    rows = db.execute(select(SupplierQuote.product_id, func.min(SupplierQuote.unit_price))
-                      .join(Product, Product.id == SupplierQuote.product_id)
-                      .where(Product.merchant_id == merchant_id).group_by(SupplierQuote.product_id)).all()
-    return {str(pid): price for pid, price in rows}
+    """Cost price per item: what the stock in hand cost (see profit.unit_costs)."""
+    return {pid: cost for pid, (cost, _) in profit.unit_costs(db, merchant_id).items()}
 
 
 # ---------- 1. festival nudge ----------

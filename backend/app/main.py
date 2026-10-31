@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.buying_routes import buying_api
 from app.api.growth_routes import growth_api
 from app.api.routes import VERSION, api, public
 from app.api.soundbox_routes import pay_public, soundbox_api
@@ -132,5 +133,6 @@ async def validation_error(_: Request, exc: RequestValidationError) -> JSONRespo
 app.include_router(public)
 app.include_router(api)
 app.include_router(growth_api)
+app.include_router(buying_api)
 app.include_router(soundbox_api)
 app.include_router(pay_public)

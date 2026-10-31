@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import ApiError, parse_money
 from app.models import GoodsReceipt, Inventory, Product, utcnow
-from app.services import audit
+from app.services import audit, profit
 from app.services.restock import money
 
 # Common shop words for each item (Hinglish / Hindi / trade names). Matching is case-insensitive.
@@ -218,6 +218,12 @@ def confirm_receipt(db: Session, merchant_id: uuid.UUID, user_id: uuid.UUID, act
             db.add(inv)
         inv.on_hand_packs += line["packs"]
         inv.source, inv.source_updated_at, inv.updated_at = "MANUAL", utcnow(), utcnow()
+    supplier = supplier_name.strip()[:120] if supplier_name is not None else receipt.supplier_name
+    for line in final:
+        if line["unit_price"] is not None:  # the bill's price is the cost price of these packs
+            product = products[line["product_id"]]
+            profit.add_lot(db, merchant_id, product.id, line["packs"], Decimal(line["unit_price"]), "BILL",
+                           supplier_name=supplier, brand=product.brand, receipt_id=receipt.id)
     receipt.lines = final
     receipt.total = money(sum((Decimal(line["line_total"]) for line in final if line["line_total"]), Decimal("0")))
     if supplier_name is not None:
