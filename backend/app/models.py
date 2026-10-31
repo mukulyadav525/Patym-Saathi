@@ -500,3 +500,18 @@ class LiveEvent(Base):
     announce: Mapped[str | None] = mapped_column(String(300), nullable=True)  # what the Soundbox says aloud
     data: Mapped[dict] = mapped_column(JSONB, default=dict)
     created_at: Mapped[datetime] = ts()
+
+
+class MerchantLoan(Base):
+    """A Paytm merchant loan being repaid from daily settlements (SAMPLE until the lending data is connected)."""
+    __tablename__ = "merchant_loans"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    product: Mapped[str] = mapped_column(String(80))
+    sanctioned: Mapped[Decimal] = mapped_column(Money)
+    outstanding: Mapped[Decimal] = mapped_column(Money)
+    daily_installment: Mapped[Decimal] = mapped_column(Money)
+    started_on: Mapped[date] = mapped_column(Date)
+    ends_on: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(12), default="ACTIVE")  # ACTIVE | CLOSED
+    source: Mapped[str] = mapped_column(String(20), default="SAMPLE")

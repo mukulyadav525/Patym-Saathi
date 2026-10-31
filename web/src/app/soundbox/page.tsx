@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, CheckCircle2, Keyboard, Loader2, Mic, MicOff, Power, ScanLine, Undo2, Volume2, X } from "lucide-react";
+import { BookOpen, CheckCircle2, Keyboard, Loader2, Mic, MicOff, Power, ScanLine, ShieldCheck, Undo2, Volume2, X } from "lucide-react";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
@@ -29,6 +29,7 @@ const isDue = (s: Entry) => s.status === "PENDING" || s.payment_status === "AWAI
 
 function screenFor(r: Result): Screen {
   const sale = r.sale;
+  if (r.action === "RECORDED" && sale?.kind === "BUY") return { big: rupees(sale.total), small: "Order drafted · approve it in the app or dashboard", tone: "ask" };
   if (r.action === "RECORDED" && sale) {
     const big = sale.kind === "PAYMENT" ? `+${rupees(sale.total)}` : rupees(sale.total);
     const small = `${sale.bill_number} · ${sale.customer_name ?? "Walk-in"} · ${sale.payment_status === "AWAITED" ? "UPI awaited" : MODE_LABEL[sale.payment_mode ?? ""] ?? ""}`;
@@ -68,6 +69,8 @@ export default function SoundboxPage() {
   const [payAmount, setPayAmount] = useState("");
   const [paying, setPaying] = useState(false);
   const [bill, setBill] = useState<Entry | null>(null); // the bill from the last voice entry here
+  // A plan or purchase Saathi drafted that waits for the merchant's tap (in the app, the dashboard, or here).
+  const [approval, setApproval] = useState<{ taskId: string; title: string; amount: string } | null>(null);
   const [closedId, setClosedId] = useState<string | null>(null);
   const [billQr, setBillQr] = useState<{ url: string; image: string } | null>(null);
 
@@ -143,6 +146,7 @@ export default function SoundboxPage() {
       if (isDue(sale)) setPayAmount(String(Number(sale.total)));
     }
     setLog((cur) => [{ id: Date.now(), heard: r.heard || r.command, reply: r.reply, by: r.understood_by }, ...cur].slice(0, 6));
+    if (r.task_id) setApproval({ taskId: r.task_id, title: r.reply.split(".")[0], amount: r.sale ? r.sale.total : "" });
     if (r.expects_reply) {
       followUntil.current = Date.now() + FOLLOWUP_MS;
       setAwaitingReply(true);
@@ -224,6 +228,33 @@ export default function SoundboxPage() {
     const off = onLive((events) => {
       for (const e of events) {
         if (e.kind === "COUNTER_UNDO") setBill((b) => (b?.id === e.data.sale_id ? null : b));
+        if (e.kind === "APPROVAL_NEEDED") {
+          setApproval({ taskId: e.data.task_id as string, title: e.title.replace(/^Approve: /, ""), amount: e.data.amount as string });
+          continue;
+        }
+        if (e.kind === "APPROVED" || e.kind === "REJECTED") {
+          setApproval((a) => (a?.taskId === e.data.task_id ? null : a));
+          setLog((cur) => [{ id: e.id, heard: e.title, reply: e.announce ?? e.body, by: "" }, ...cur].slice(0, 6));
+          if (e.kind === "APPROVED" && e.announce) {
+            // The merchant approved on their phone or the dashboard: the Soundbox says so.
+            queue.current = queue.current.then(async () => {
+              setScreen({ big: "Approved", small: e.title.replace(/^Approved: /, ""), tone: "ok" });
+              const ctx = audioCtx();
+              if (!ctx) return;
+              listener.current?.mute(true);
+              setPhase("speaking");
+              try {
+                await playMp3(ctx, (await api.announcement(e.id)).audio);
+              } catch {
+                // On screen anyway.
+              } finally {
+                listener.current?.mute(false);
+                setPhase("idle");
+              }
+            });
+          }
+          continue;
+        }
         if (e.kind !== "QR_PAYMENT") continue;
         if (e.data.sale_id) {
           const paid = { status: "RECORDED", payment_mode: "UPI", payment_status: "PAID", bill_number: e.data.bill_number as string } as const;
@@ -407,6 +438,19 @@ export default function SoundboxPage() {
             )}
             {error && <p className="mt-3 rounded-lg bg-red/20 px-3 py-2 text-sm text-[#FFC9C9]">{error}</p>}
           </div>
+
+          {approval && (
+            <div className="reply-in card flex flex-wrap items-center gap-3 border border-[#FFD48A] bg-amber-soft p-4">
+              <ShieldCheck className="size-6 shrink-0 text-amber" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-extrabold text-ink">Waiting for your approval</p>
+                <p className="truncate text-sm text-ink-soft">{approval.title}{approval.amount ? ` · ${rupees(approval.amount)}` : ""}</p>
+                <p className="text-[11px] text-muted">Nothing is ordered until you tap Approve (with your PIN) in the app or the dashboard.</p>
+              </div>
+              <a href={`/tasks/${approval.taskId}`} target="_blank" rel="noopener"
+                className="inline-flex h-10 shrink-0 items-center rounded-xl bg-cyan px-4 text-sm font-bold text-white">Review &amp; approve</a>
+            </div>
+          )}
 
           <div className="card p-5">
             <div className="mb-3 flex items-center justify-between">

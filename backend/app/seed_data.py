@@ -31,6 +31,8 @@ PRODUCTS = [
     # Slow movers: plenty of stock, sales falling to zero last week (so last week's ₹9,130 is unchanged).
     ("NOODLE12", "Instant noodles", "इंस्टेंट नूडल्स", "12-pack", 14, [6, 4, 2, 0], "110", "116", "132"),
     ("HAIROIL", "Hair oil", "बालों का तेल", "200 ml", 18, [3, 2, 1, 0], "78", "82", "95"),
+    # The smaller atta bag, stocked from this week (no sales history yet): what "5 kilo atta" at the counter is.
+    ("ATTA5", "Atta 5 kg", "आटा 5 किलो", "5 kg bag", 6, [0, 0, 0, 0], "198", "205", "220"),
 ]
 
 # Vendor price lists (SAMPLE; brand names are made up). The brand the shop stocks now, which both suppliers quote
@@ -44,6 +46,7 @@ CURRENT_BRANDS = {
     "TEA250": ("Assam Gold CTC", "STANDARD", "Strong CTC, Assam blend", "160"),
     "NOODLE12": ("Quick Masala Noodles", "STANDARD", "Maida, 2-minute masala", "140"),
     "HAIROIL": ("Pure Coconut Hair Oil", "STANDARD", "100% coconut, bottle", "99"),
+    "ATTA5": ("Shree Chakki Atta", "STANDARD", "Whole wheat, chakki ground", "230"),
 }
 # Other brands and qualities the same suppliers offer:
 # sku: [(supplier code, brand, quality, what sets it apart, cost, MRP or None, what nearby shops sell it for, packs)]
@@ -100,6 +103,8 @@ PEER_MEDIANS = {"ATTA10": "7", "RICE5": "5", "SUGAR1": "18", "TOOR1": "8", "OIL1
 
 # Merchant-entered figures (editable in the app).
 CASH_ON_HAND = Decimal("6000")
+# Paytm merchant loan being repaid from daily settlements: (product, sanctioned, outstanding, daily, days ago, days left)
+LOAN = ("Paytm Merchant Loan", Decimal("50000"), Decimal("18400"), Decimal("300"), 105, 62)
 WEEKLY_EXPENSES = Decimal("3500")
 DEFAULT_RESTOCK_BUDGET = Decimal("5000")
 

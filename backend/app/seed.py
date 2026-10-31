@@ -18,6 +18,7 @@ from app.models import (
     Inventory,
     Invoice,
     KhataEntry,
+    MerchantLoan,
     Merchant,
     MerchantMembership,
     PeerBenchmark,
@@ -77,13 +78,15 @@ def reset(db: Session, today: date | None = None) -> None:
             for week_start, sold in zip(week_starts, sales, strict=True):
                 db.add(SalesWeekly(merchant_id=owner.id, product_id=product.id, week_start=week_start,
                                    packs_sold=sold, source="SAMPLE", unit_price=Decimal(sell)))
-            event_packs, baseline = fx.FESTIVAL_SALES[sku]
-            db.add(SalesEvent(merchant_id=owner.id, product_id=product.id, event_code=fx.FESTIVAL["code"],
-                              event_name=fx.FESTIVAL["name"], event_date=date.fromisoformat(fx.FESTIVAL["last_date"]),
-                              event_week_packs=event_packs, baseline_weekly_packs=Decimal(baseline), source="SAMPLE"))
-            db.add(PeerBenchmark(merchant_id=owner.id, product_id=product.id, locality=fx.PEER_LOCALITY,
-                                 peer_median_weekly=Decimal(fx.PEER_MEDIANS[sku]), peer_count=fx.PEER_COUNT,
-                                 period_label="Last 4 weeks", source="SAMPLE"))
+            if sku in fx.FESTIVAL_SALES:  # items new this year have no festival history
+                event_packs, baseline = fx.FESTIVAL_SALES[sku]
+                db.add(SalesEvent(merchant_id=owner.id, product_id=product.id, event_code=fx.FESTIVAL["code"],
+                                  event_name=fx.FESTIVAL["name"], event_date=date.fromisoformat(fx.FESTIVAL["last_date"]),
+                                  event_week_packs=event_packs, baseline_weekly_packs=Decimal(baseline), source="SAMPLE"))
+            if sku in fx.PEER_MEDIANS:
+                db.add(PeerBenchmark(merchant_id=owner.id, product_id=product.id, locality=fx.PEER_LOCALITY,
+                                     peer_median_weekly=Decimal(fx.PEER_MEDIANS[sku]), peer_count=fx.PEER_COUNT,
+                                     period_label="Last 4 weeks", source="SAMPLE"))
             brand, quality, note, mrp = fx.CURRENT_BRANDS[sku]
             for code, price, avail in (
                 ("A", price_a, fx.AVAILABLE_A),
@@ -109,6 +112,10 @@ def reset(db: Session, today: date | None = None) -> None:
                        paid_at=now if status == "PAID" else None))
     db.add(Invoice(merchant_id=other.id, customer_name="Other Customer", customer_phone_masked="+91 90000 0X999",
                    invoice_number="INV-9001", amount=Decimal("500"), status="PENDING", due_date=today))
+
+    product_name, sanctioned, outstanding, daily, ago, left = fx.LOAN
+    db.add(MerchantLoan(merchant_id=merchant.id, product=product_name, sanctioned=sanctioned, outstanding=outstanding,
+                        daily_installment=daily, started_on=today - timedelta(days=ago), ends_on=today + timedelta(days=left)))
 
     for customer, phone, entries in fx.KHATA:
         for offset, kind, amount, note in entries:

@@ -12,6 +12,7 @@ import {
   styles as ui,
 } from "@/components/ui";
 import { api, ApiError, type TaskDetail } from "@/lib/api";
+import { biometricsAvailable, confirmWithBiometrics } from "@/lib/consent";
 import { useAuth } from "@/lib/auth";
 import { plural, rupees, timeAgo, useLoad } from "@/lib/hooks";
 import { colors, radius } from "@/lib/theme";
@@ -454,7 +455,15 @@ function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
     }
   };
 
+  const [bio, setBio] = useState(false);
+  useEffect(() => {
+    void biometricsAvailable().then(setBio);
+  }, []);
+
   const approve = async () => {
+    // Face / fingerprint first (when the phone has it): the merchant's own consent, on their own device.
+    const consent = await confirmWithBiometrics(`Approve ${rupees(pending.amount)} · ${task.title}`);
+    if (!consent.ok) return;
     setBusy(true);
     try {
       onDone(await api.confirm(pending.id, key.current, needsPin ? pin : undefined));
@@ -551,11 +560,13 @@ function ApproveSheet({ visible, task, onClose, onDone, onRenewed }: {
         {left === 0 ? (
           <Button label="Approval window expired · Renew" icon="refresh" onPress={renew} loading={busy} />
         ) : (
-          <Button label={`Approve ${rupees(pending.amount)}`} icon="checkmark-circle" onPress={approve} loading={busy}
+          <Button label={`Approve ${rupees(pending.amount)}`} icon={bio ? "finger-print" : "checkmark-circle"} onPress={approve} loading={busy}
             disabled={needsPin && pin.length !== 4} />
         )}
         <Button label="Cancel" kind="ghost" onPress={onClose} style={{ marginTop: 4 }} />
-        <Txt style={[ui.muted, { textAlign: "center", fontSize: 11 }]}>Voice “haan” never approves. Only this tap does.</Txt>
+        <Txt style={[ui.muted, { textAlign: "center", fontSize: 11 }]}>
+          Voice “haan” never approves. Only this tap does{bio ? ", with your fingerprint or face" : ""}.
+        </Txt>
       </SafeAreaView>
       </View>
     </Modal>

@@ -570,6 +570,34 @@ class ReceiptOut(BaseModel):
     confirmed_at: datetime | None
     unmatched: list[str] = []
     bill_total: MoneyStr | None = None
+    new_items: list["NewBillItem"] = Field(default=[], description="Unrecognised lines read as items the merchant can add")
+
+
+class NewBillItem(BaseModel):
+    source_text: str
+    name: str
+    pack_label: str
+    packs: int
+    unit_price: MoneyStr | None
+    suggested_sell_price: MoneyStr | None
+
+
+class NewBillItemIn(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+    name_hi: str | None = Field(default=None, max_length=60)
+    pack_label: str = Field(default="1 pack", max_length=40)
+    sell_price: str = Field(max_length=12)
+    packs: int = Field(ge=1, le=1000)
+    unit_price: str | None = Field(default=None, max_length=12)
+
+
+class ProductIn(BaseModel):
+    name: str = Field(min_length=2, max_length=60)
+    name_hi: str | None = Field(default=None, max_length=60)
+    pack_label: str = Field(default="1 pack", max_length=40)
+    sell_price: str = Field(max_length=12)
+    opening_stock: int = Field(default=0, ge=0, le=10000)
+    cost_price: str | None = Field(default=None, max_length=12)
 
 
 class ReceiptTextRequest(BaseModel):
@@ -614,7 +642,7 @@ class CounterLineOut(CounterLine):
 class CounterSaleOut(BaseModel):
     id: str
     bill_number: str | None
-    kind: Literal["SALE", "RETURN", "PAYMENT"]
+    kind: Literal["SALE", "RETURN", "PAYMENT", "BUY"]
     customer_name: str | None
     lines: list[CounterLineOut]
     total: MoneyStr
@@ -641,6 +669,7 @@ class SoundboxResult(BaseModel):
     expects_reply: bool = False
     understood_by: str = ""
     sale: CounterSaleOut | None = None
+    task_id: str | None = Field(default=None, description="A plan or purchase this created; it waits for approval in the app")
 
 
 class QrPaymentIn(BaseModel):

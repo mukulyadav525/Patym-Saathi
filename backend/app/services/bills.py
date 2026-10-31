@@ -17,6 +17,7 @@ from app.services.restock import money
 # Common shop words for each item (Hinglish / Hindi / trade names). Matching is case-insensitive.
 ALIASES = {
     "ATTA10": ("atta", "aata", "wheat flour", "chakki", "आटा"),
+    "ATTA5": ("atta", "aata", "wheat flour", "chakki", "आटा"),
     "RICE5": ("rice", "chawal", "basmati", "चावल"),
     "SUGAR1": ("sugar", "cheeni", "chini", "shakkar", "चीनी"),
     "TOOR1": ("toor", "tur", "arhar", "dal", "daal", "तूर", "दाल"),
@@ -39,14 +40,31 @@ def _num(s: str) -> Decimal | None:
     return value if value.is_finite() else None
 
 
+PACK_SIZE = re.compile(r"(\d+(?:\.\d+)?)\s*(kg|g|gm|l|ltr|ml)\b", re.I)
+
+
+def _same_size(line: str, product: Product) -> bool:
+    """The line names this product's pack size ("Atta 5kg" for a 5 kg bag)."""
+    pack = PACK_SIZE.search(product.pack_label)
+    return bool(pack) and any(Decimal(n) == Decimal(pack.group(1)) and u.lower()[0] == pack.group(2).lower()[0]
+                              for n, u in PACK_SIZE.findall(line))
+
+
 def _match(line: str, products: list[Product]) -> Product | None:
     lowered = line.lower()
-    best, best_len = None, 0
-    for p in products:
-        for alias in ALIASES.get(p.sku, ()) + (p.name.lower(), p.name_hi):
-            if alias and alias.lower() in lowered and len(alias) > best_len:
-                best, best_len = p, len(alias)
-    return best
+    found: list[tuple[int, int, Product]] = []
+    for order, p in enumerate(products):
+        length = max((len(a) for a in ALIASES.get(p.sku, ()) + (p.name.lower(), p.name_hi) if a and a.lower() in lowered),
+                     default=0)
+        if length:
+            found.append((length, order, p))
+    if not found:
+        return None
+    longest = max(f[0] for f in found)
+    tied = [f for f in found if f[0] == longest]
+    # Two sizes of one item (Atta 10 kg / 5 kg): the size written on the line decides, else the first listed.
+    sized = [f for f in tied if _same_size(line, f[2])]
+    return min(sized or tied, key=lambda f: f[1])[2]
 
 
 MONEY_RE = r"(?:rs\.?|inr|₹)?\s*(\d[\d,]*(?:\.\d+)?)"
@@ -130,7 +148,7 @@ def read_quantities(line: str, ref_price: Decimal) -> tuple[Decimal | None, Deci
 
 
 def parse_bill_text(text: str, products: list[Product]) -> dict:
-    lines_out, unmatched = [], []
+    lines_out, unmatched, new_items = [], [], []
     supplier, bill_total = "", None
     for raw in text.splitlines()[:200]:
         line = raw.strip()
@@ -150,6 +168,12 @@ def parse_bill_text(text: str, products: list[Product]) -> dict:
         if product is None:
             if NUMBER.search(UNIT.sub(" ", line)):
                 unmatched.append(line[:120])
+                # Not in the shop's list: offer it as a new item (the merchant checks it and sets the price).
+                from app.services.catalog import guess_new_item  # catalog imports profit, which imports this module
+                qty, price = read_quantities(line, Decimal("0"))
+                item = guess_new_item(line, qty, price)
+                if item["name"]:
+                    new_items.append(item)
             continue
         qty, price = read_quantities(line, product.sell_price)
         if qty is None or qty <= 0 or qty != qty.to_integral_value() or qty > 1000:
@@ -166,7 +190,7 @@ def parse_bill_text(text: str, products: list[Product]) -> dict:
         if len(lines_out) >= MAX_LINES:
             break
     total = sum((Decimal(line["line_total"]) for line in lines_out if line["line_total"]), Decimal("0"))
-    return {"supplier_name": supplier, "lines": lines_out, "unmatched": unmatched[:20],
+    return {"supplier_name": supplier, "lines": lines_out, "unmatched": unmatched[:20], "new_items": new_items[:20],
             "total": money(total), "bill_total": f"{money(bill_total):.2f}" if bill_total is not None else None}
 
 
@@ -183,7 +207,33 @@ def create_receipt(db: Session, merchant_id: uuid.UUID, user_id: uuid.UUID, acto
     audit.record(db, merchant_id, actor, "BILL_READ", "goods_receipt", receipt.id,
                  f"Bill read ({source.lower()}): {len(parsed['lines'])} item lines found; waiting for merchant review",
                  details={"lines": len(parsed["lines"]), "unmatched": len(parsed["unmatched"])})
-    return receipt, {"unmatched": parsed["unmatched"], "bill_total": parsed["bill_total"]}
+    return receipt, {"unmatched": parsed["unmatched"], "bill_total": parsed["bill_total"], "new_items": parsed["new_items"]}
+
+
+def add_new_item(db: Session, ctx, receipt_id: uuid.UUID, *, name: str, name_hi: str | None, pack_label: str,
+                 sell_price: str, packs: int, unit_price: str | None) -> GoodsReceipt:
+    """A line Saathi didn't recognise becomes a new inventory item and a line on this draft bill. Its stock and
+    cost price arrive when the merchant confirms the bill, like every other line."""
+    from app.services import catalog
+
+    receipt = db.scalars(select(GoodsReceipt).where(GoodsReceipt.id == receipt_id, GoodsReceipt.merchant_id == ctx.merchant_id)
+                         .with_for_update()).first()
+    if receipt is None:
+        raise ApiError(404, "NOT_FOUND", "Bill not found")
+    if receipt.status != "DRAFT":
+        raise ApiError(409, "INVALID_TRANSITION", f"This bill is already {receipt.status.lower()}")
+    if not 1 <= packs <= 1000:
+        raise ApiError(422, "BAD_LINE", "Packs must be 1-1000")
+    cost = parse_money(unit_price, "Cost price", "0", "100000") if unit_price not in (None, "") else None
+    product = catalog.create_product(db, ctx, name=name, name_hi=name_hi, pack_label=pack_label, sell_price=sell_price,
+                                     opening_stock=0, cost_price=f"{cost:.2f}" if cost is not None else None, source="BILL")
+    receipt.lines = [*receipt.lines, {
+        "product_id": str(product.id), "name": product.name, "pack_label": product.pack_label, "packs": packs,
+        "unit_price": f"{cost:.2f}" if cost is not None else None,
+        "line_total": f"{money(cost * packs):.2f}" if cost is not None else None, "source_text": None}]
+    receipt.total = money(sum((Decimal(ln["line_total"]) for ln in receipt.lines if ln["line_total"]), Decimal("0")))
+    db.commit()
+    return receipt
 
 
 def confirm_receipt(db: Session, merchant_id: uuid.UUID, user_id: uuid.UUID, actor: str, receipt_id: uuid.UUID,

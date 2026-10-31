@@ -12,7 +12,7 @@ from app.adapters.paytm import SUCCESS, DemoPaytmAdapter, get_adapter
 from app.config import get_settings
 from app.errors import ApiError
 from app.models import Approval, Invoice, Merchant, PaymentEvent, Task, utcnow
-from app.services import audit
+from app.services import audit, live
 from app.services.common import canonical_hash, move_invoice, move_task
 from app.services.states import TERMINAL_TASK, UNPAID  # noqa: F401 (UNPAID re-exported)
 from app.tools import registry
@@ -74,6 +74,7 @@ def start_collect(db: Session, task: Task, invoice: Invoice, merchant: Merchant,
     db.flush()
     audit.record(db, task.merchant_id, "saathi", "APPROVAL_REQUESTED", "approval", approval.id,
                  f"Approval needed to send a ₹{invoice.amount:,.2f} payment link", task_id=task.id)
+    live.approval_needed(db, task.merchant_id, task.id, task.title, invoice.amount, approval.id)
     move_task(db, task, "AWAITING_APPROVAL", "saathi", "Waiting for merchant approval")
     return approval
 

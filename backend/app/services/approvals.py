@@ -11,7 +11,7 @@ from app.config import get_settings
 from app.errors import ApiError
 from app.models import Approval, IdempotencyRecord, Plan, Task, User, utcnow
 from app.security import Ctx, verify_password
-from app.services import audit, dues_flow, restock_flow
+from app.services import audit, dues_flow, live, restock_flow
 from app.tools import registry
 
 OPERATION = "approval_confirm"
@@ -119,6 +119,10 @@ def confirm(db: Session, ctx: Ctx, approval_id: uuid.UUID, idempotency_key: str,
 
     tool = "create_supplier_order" if approval.action_type == "SUPPLIER_ORDER" else "create_payment_link"
     registry.invoke(db, tool, caller=registry.Caller.APPROVED_EXECUTION, approval=approval, task=task, actor=ctx.actor)
+    done = ("order supplier ko bhej diya" if approval.action_type == "SUPPLIER_ORDER" else "payment link taiyar hai")
+    live.publish(db, ctx.merchant_id, "APPROVED", f"Approved: {task.title}", f"₹{approval.amount:,.0f} · by {ctx.user.display_name}",
+                 announce=f"{task.title}: {approval.amount:,.0f} rupaye ka approval mil gaya, {done}.",
+                 data={"task_id": str(task.id), "amount": f"{approval.amount:.2f}"})
 
     db.add(IdempotencyRecord(merchant_id=ctx.merchant_id, operation=OPERATION, key=idempotency_key,
                              request_hash=request_hash, status="COMPLETED", result_ref=str(task.id),
@@ -139,6 +143,8 @@ def reject(db: Session, ctx: Ctx, approval_id: uuid.UUID) -> uuid.UUID:
         restock_flow.reject(db, task, approval, ctx.actor)
     else:
         dues_flow.reject(db, task, approval, ctx.actor)
+    live.publish(db, ctx.merchant_id, "REJECTED", f"Rejected: {task.title}", f"₹{approval.amount:,.0f} · nothing was ordered or sent",
+                 data={"task_id": str(task.id)})
     db.commit()
     return task.id
 
@@ -185,5 +191,6 @@ def renew(db: Session, ctx: Ctx, task_id: uuid.UUID) -> uuid.UUID:
     db.flush()
     audit.record(db, ctx.merchant_id, ctx.actor, "APPROVAL_RENEWED", "approval", fresh.id,
                  f"Approval window renewed for the same ₹{old.amount:,.2f} (unchanged)", task_id=task.id)
+    live.approval_needed(db, ctx.merchant_id, task.id, task.title, fresh.amount, fresh.id)
     db.commit()
     return task.id

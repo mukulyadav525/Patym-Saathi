@@ -29,6 +29,7 @@ const config: ExpoConfig = {
     "expo-router",
     "expo-status-bar",
     "expo-secure-store",
+    ["expo-local-authentication", { faceIDPermission: "Saathi asks for your face or fingerprint before you approve an order or payment." }],
     ["expo-audio", { microphonePermission: "Saathi uses the microphone only when you tap the mic to speak a request." }],
     ["expo-speech-recognition", {
       microphonePermission: "Saathi listens for “Hey Saathi” only while the app is open on screen.",

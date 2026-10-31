@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Animated, AppState, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -79,17 +80,23 @@ function Banner({ event, onDone }: { event: LiveEvent; onDone: () => void }) {
     const t = setTimeout(() => Animated.timing(y, { toValue: -120, duration: 220, useNativeDriver: true }).start(() => done.current()), SHOW_MS);
     return () => clearTimeout(t);
   }, [y]);
-  const money = event.kind === "QR_PAYMENT";
-  const icon = money ? "cash-outline" : event.kind === "COUNTER_UNDO" ? "arrow-undo-outline" : "receipt-outline";
+  const money = event.kind === "QR_PAYMENT" || event.kind === "APPROVED";
+  const ask = event.kind === "APPROVAL_NEEDED";
+  const taskId = typeof event.data.task_id === "string" ? event.data.task_id : null;
+  const icon = ask ? "shield-checkmark-outline" : money ? "cash-outline" : event.kind === "COUNTER_UNDO" ? "arrow-undo-outline" : "receipt-outline";
+  const open = () => {
+    done.current();
+    if (taskId) router.push({ pathname: "/task/[id]", params: { id: taskId } });
+  };
   return (
     <Animated.View pointerEvents="box-none" style={[s.wrap, { top: insets.top + 8, transform: [{ translateY: y }] }]}>
-      <Pressable onPress={() => done.current()} style={s.card} accessibilityRole="alert" accessibilityLabel={`${event.title}. ${event.body}`}>
-        <View style={[s.icon, { backgroundColor: money ? colors.green : colors.cyan }]}>
+      <Pressable onPress={open} style={s.card} accessibilityRole="alert" accessibilityLabel={`${event.title}. ${event.body}`}>
+        <View style={[s.icon, { backgroundColor: money ? colors.green : ask ? colors.amber : colors.cyan }]}>
           <Ionicons name={icon} size={18} color="#fff" />
         </View>
         <View style={{ flex: 1 }}>
           <Txt style={s.title} numberOfLines={2}>{event.title}</Txt>
-          <Txt style={s.body} numberOfLines={1}>{event.body}</Txt>
+          <Txt style={s.body} numberOfLines={1}>{ask ? "Tap to review and approve" : event.body}</Txt>
         </View>
       </Pressable>
     </Animated.View>

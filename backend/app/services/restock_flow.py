@@ -28,7 +28,7 @@ from app.models import (
     today_ist,
     utcnow,
 )
-from app.services import audit, profit
+from app.services import audit, live, profit
 from app.services.common import canonical_hash, move_order, move_task
 from app.services.restock import (
     BudgetExceeded, ItemInput, PlanLine, PlanResult, QuoteInput, build_plan, festival_uplift, money,
@@ -329,6 +329,7 @@ def request_approval(db: Session, task: Task, plan: Plan) -> Approval:
     audit.record(db, task.merchant_id, "saathi", "APPROVAL_REQUESTED", "approval", approval.id,
                  f"Approval needed for ₹{plan.total:,.2f} (plan v{plan.version})", task_id=task.id,
                  details={"amount": f"{plan.total:.2f}", "plan_version": plan.version})
+    live.approval_needed(db, task.merchant_id, task.id, task.title, plan.total, approval.id)
     return approval
 
 

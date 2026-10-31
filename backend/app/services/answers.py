@@ -14,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.adapters import sarvam
-from app.models import Invoice, Plan, Task, today_ist
+from app.models import Invoice, MerchantLoan, Plan, Task, today_ist
 from app.security import Ctx
 from app.services import brief as brief_service
 from app.services import growth, profit, sourcing
@@ -36,6 +36,9 @@ SOURCING_WORDS = re.compile(r"\b(vendors?|suppliers?|distributors?|kahan\s+se|ka
 SALES_WORDS = re.compile(r"\b(sale|sales|bikri|bika|bike|becha|kamai|revenue|munafa|margin|profit)\b", re.I)
 CASH_WORDS = re.compile(r"\b(cash|paisa|paise|balance)\b", re.I)
 APPROVAL_WORDS = re.compile(r"\b(approvals?|approve|manzoori|pending\s+kaam|tasks?)\b", re.I)
+LOAN_WORDS = re.compile(r"\b(loan|loans|emi|karz|karza|karja|qarz|kist|kisht|installment)\b", re.I)
+SHORT_WORDS = re.compile(r"\b(kami|kam\s+hai|kam\s+hain|khatam|short|low|kya\s+kya\s+(lana|mangana|mangwana)|"
+                         r"kya\s+(lana|mangana|mangwana)|restock|kya\s+chahiye)\b", re.I)
 NUM = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
@@ -65,6 +68,10 @@ def quick_answer(db: Session, ctx: Ctx, text: str) -> tuple[str, list[str]] | No
     sales = sales_summary(db, mid)
 
     product = _product_in(text, [p for p, _ in snapshot])
+    if LOAN_WORDS.search(text):
+        return loan_answer(db, mid), []
+    if product is None and SHORT_WORDS.search(text):
+        return shortage_answer(snapshot, sales)
     if product is not None and SOURCING_WORDS.search(text) and not PROFIT_WORDS.search(text):
         return sourcing.spoken_comparison(db, mid, product), []
     if PROFIT_WORDS.search(text) and (product is not None or not WEEK_WORDS.search(text)):
@@ -144,6 +151,37 @@ def quick_answer(db: Session, ctx: Ctx, text: str) -> tuple[str, list[str]] | No
     return None
 
 
+def active_loan(db: Session, merchant_id) -> MerchantLoan | None:
+    return db.scalars(select(MerchantLoan).where(MerchantLoan.merchant_id == merchant_id, MerchantLoan.status == "ACTIVE")
+                      .order_by(MerchantLoan.started_on.desc()).limit(1)).first()
+
+
+def loan_answer(db: Session, merchant_id) -> str:
+    loan = active_loan(db, merchant_id)
+    if loan is None:
+        return "Abhi koi loan chal nahi raha hai."
+    days = max(0, (loan.ends_on - today_ist()).days)
+    return (f"{loan.product}: {_r(loan.outstanding)} baaki hai, {_r(loan.sanctioned)} mein se. Roz {_r(loan.daily_installment)} "
+            f"settlement se katta hai, lagbhag {days} din mein poora ho jayega.")
+
+
+def shortage_answer(snapshot: list, sales: dict) -> tuple[str, list[str]]:
+    """What is running short: less than a week of stock at the usual sales, out-of-stock first."""
+    short = []
+    for p, inv in snapshot:
+        weeks = sales.get(str(p.id), {}).get("weeks", [])
+        avg = Decimal(sum(weeks)) / len(weeks) if weeks else Decimal("0")
+        if avg > 0 and inv.usable_packs < avg:
+            short.append((inv.usable_packs, p.name, avg))
+    if not short:
+        return "Sab items mein kam se kam ek hafte ka stock hai.", []
+    short.sort()
+    parts = [f"{name} {'khatam' if left == 0 else f'{left} bacha'} (hafte mein ~{avg:.0f} bikta)" for left, name, avg in short[:5]]
+    more = f" aur {len(short) - len(parts)} aur" if len(short) > len(parts) else ""
+    return (f"{len(short)} item kam hain: " + ", ".join(parts) + f"{more}. Restock plan banaun?",
+            ["Weekend ke liye ₹5,000 ke andar stock arrange karo"])
+
+
 def profit_answer(db: Session, merchant_id, product=None) -> str:
     """How much profit: one item, or the whole shop, since the start of the 4-week sales window."""
     rep = profit.report(db, merchant_id)
@@ -207,6 +245,9 @@ def snapshot(db: Session, ctx: Ctx) -> dict:
                             "profit_rupees": i["profit"] and f"{Decimal(i['profit']):.0f}",
                             "cost_price": i["cost_price"] and f"{Decimal(i['cost_price']):.0f}",
                             "sell_price": f"{Decimal(i['sell_price']):.0f}"} for i in rep["items"]],
+        "loan": ({"product": loan.product, "outstanding_rupees": f"{loan.outstanding:.0f}",
+                  "sanctioned_rupees": f"{loan.sanctioned:.0f}", "daily_installment_rupees": f"{loan.daily_installment:.0f}",
+                  "ends_on": loan.ends_on.isoformat()} if (loan := active_loan(db, mid)) else None),
         "waiting_for_approval": [{"task": t.title, "rupees": f"{plans[t.id].total:.0f}" if plans.get(t.id) else None}
                                  for t in waiting],
     }

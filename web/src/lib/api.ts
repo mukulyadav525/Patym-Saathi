@@ -110,6 +110,8 @@ export const api = {
   confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[]) =>
     request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/confirm`, { lines }),
   discardBill: (id: string) => request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/discard`),
+  addProduct: (body: S["ProductIn"]) => request<S["InventoryItem"]>("POST", "/api/v1/products", body),
+  billNewItem: (id: string, body: S["NewBillItemIn"]) => request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/new-item`, body),
   soundboxListen: (form: FormData) => request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/listen", form, {}, SLOW_MS),
   soundboxText: (text: string, followup = false, speak = true) =>
     request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/text", { text, followup, speak }, {}, SLOW_MS),

@@ -24,6 +24,12 @@ def publish(db: Session, merchant_id: uuid.UUID, kind: str, title: str, body: st
     return event
 
 
+def approval_needed(db: Session, merchant_id: uuid.UUID, task_id: uuid.UUID, title: str, amount, approval_id) -> LiveEvent:
+    """Something waits for the merchant's tap: the app and the dashboard show it at once, wherever it was asked."""
+    return publish(db, merchant_id, "APPROVAL_NEEDED", f"Approve: {title}", f"₹{amount:,.0f} · tap to review",
+                   data={"task_id": str(task_id), "approval_id": str(approval_id), "amount": f"{amount:.2f}"})
+
+
 def latest_id(merchant_id: uuid.UUID) -> int:
     with SessionLocal() as db:
         return db.scalar(select(LiveEvent.id).where(LiveEvent.merchant_id == merchant_id)

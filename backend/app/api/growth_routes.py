@@ -15,7 +15,7 @@ from app.db import get_db
 from app.errors import ApiError, parse_money
 from app.models import GoodsReceipt, Invoice, Offer, Product, Task
 from app.security import Ctx, current_ctx
-from app.services import audit, bills, dues_flow, growth, ratelimit
+from app.services import audit, bills, catalog, dues_flow, growth, ratelimit, views
 
 growth_api = APIRouter(prefix="/api/v1")
 
@@ -37,7 +37,8 @@ def _receipt_out(r: GoodsReceipt, extras: dict | None = None) -> s.ReceiptOut:
     return s.ReceiptOut(id=str(r.id), status=r.status, source=r.source, supplier_name=r.supplier_name,
                         lines=[s.ReceiptLine(**line) for line in r.lines], total=f"{r.total:.2f}",
                         created_at=r.created_at, confirmed_at=r.confirmed_at,
-                        unmatched=(extras or {}).get("unmatched", []), bill_total=(extras or {}).get("bill_total"))
+                        unmatched=(extras or {}).get("unmatched", []), bill_total=(extras or {}).get("bill_total"),
+                        new_items=[s.NewBillItem(**i) for i in (extras or {}).get("new_items", [])])
 
 
 # ---------- overview ----------
@@ -260,6 +261,24 @@ async def bill_from_photo(file: UploadFile = File(...), supplier_name: str | Non
         return _receipt_out(receipt, extras)
 
     return await run_in_threadpool(work)
+
+
+@growth_api.post("/bills/{receipt_id}/new-item", response_model=s.ReceiptOut)
+def bill_new_item(receipt_id: uuid.UUID, body: s.NewBillItemIn, ctx: Ctx = Depends(current_ctx),
+                  db: Session = Depends(get_db)) -> s.ReceiptOut:
+    """Add an item the bill has but the shop doesn't list yet; it joins this draft bill as a line."""
+    receipt = bills.add_new_item(db, ctx, receipt_id, name=body.name, name_hi=body.name_hi, pack_label=body.pack_label,
+                                 sell_price=body.sell_price, packs=body.packs, unit_price=body.unit_price)
+    return _receipt_out(receipt)
+
+
+@growth_api.post("/products", response_model=s.InventoryItem)
+def add_product(body: s.ProductIn, ctx: Ctx = Depends(current_ctx), db: Session = Depends(get_db)) -> s.InventoryItem:
+    """Add an item to the shop's list by hand (Inventory -> Add product)."""
+    product = catalog.create_product(db, ctx, name=body.name, name_hi=body.name_hi, pack_label=body.pack_label,
+                                     sell_price=body.sell_price, opening_stock=body.opening_stock, cost_price=body.cost_price)
+    db.commit()
+    return next(i for i in views.inventory(db, ctx.merchant_id) if i.product_id == str(product.id))
 
 
 @growth_api.post("/bills/{receipt_id}/confirm", response_model=s.ReceiptOut)

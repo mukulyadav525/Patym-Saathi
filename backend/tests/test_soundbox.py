@@ -105,7 +105,7 @@ def test_payment_that_arrived_first_is_linked(client, auth):
     client.post("/api/v1/soundbox/qr-payments", json={"amount": "150", "payer": "Priya"}, headers=auth)
     r = say(client, auth, "Saathi, chai di Priya ko, paise de diye")
     assert r["action"] == "RECORDED" and r["sale"]["payment_mode"] == "UPI" and r["sale"]["payment_status"] == "PAID"
-    assert "Paytm UPI se payment mil gaya" in r["reply"]
+    assert "Priya Sharma ne ₹150 Paytm UPI se bhej diye, payment verify ho gaya" in r["reply"] and "saaman de sakte hain" in r["reply"]
 
 
 def test_upi_said_but_not_yet_paid_is_awaited_then_linked(client, auth):
@@ -298,3 +298,99 @@ def test_spoken_quantity_overrides_model(client, auth, monkeypatch):
                                       {"product": "Atta", "quantity": 1, "unit": "pack"}]})
     r = say(client, auth, "Saathi, teen dal aur ek atta liye Priya ne cash")
     assert {ln["sku"]: ln["packs"] for ln in r["sale"]["lines"]} == {"TOOR1": 3, "ATTA10": 1}
+
+
+def test_five_kilo_atta_is_the_five_kilo_bag(client, auth):
+    r = say(client, auth, "Hey Saathi, Garv ne 5 kilo atta khareeda hai")
+    assert r["action"] == "ASKED" and [(ln["sku"], ln["packs"]) for ln in r["sale"]["lines"]] == [("ATTA5", 1)]
+    assert r["sale"]["total"] == "220.00" and "kul ₹220" in r["reply"]
+
+
+def test_weight_splits_into_bag_sizes(client, auth):
+    for said in ("Saathi, pandrah kilo atta diya Mukul ko cash", "Saathi, 15 kilo atta diya Priya ko cash"):
+        r = say(client, auth, said)
+        assert {ln["sku"]: ln["packs"] for ln in r["sale"]["lines"]} == {"ATTA10": 1, "ATTA5": 1} and r["sale"]["total"] == "640.00"
+
+
+def test_kitne_ka_hua_answers_the_open_bill(client, auth):
+    say(client, auth, "Saathi, Garv ne 5 kilo atta khareeda")
+    r = say(client, auth, "kitne rupaye ka hua?", followup=True)
+    assert r["action"] == "ASKED" and "kul ₹220 hua" in r["reply"] and r["expects_reply"]
+    r = say(client, auth, "cash diya", followup=True)
+    assert r["action"] == "RECORDED" and "Garv se ₹220 cash mil gaye, payment ho gayi" in r["reply"]
+    assert "saaman de sakte hain" in r["reply"]
+    r = say(client, auth, "Saathi, kitne ka hua?")
+    assert r["action"] == "ANSWERED" and "kul ₹220 hua" in r["reply"] and "Cash mila" in r["reply"]
+
+
+def test_qr_payment_announces_who_paid(client, auth):
+    say(client, auth, "Saathi, Garv ne 5 kilo atta khareeda")
+    client.post("/api/v1/soundbox/qr-payments", json={"amount": "220", "payer": "Garv"}, headers=auth)
+    event = next(e for e in client.get("/api/v1/live?after=0&wait=0", headers=auth).json()["events"] if e["kind"] == "QR_PAYMENT")
+    assert "Garv ne paise bhej diye" in event["announce"] and "payment verify ho gaya" in event["announce"]
+    today = client.get("/api/v1/soundbox/today", headers=auth).json()
+    assert today["entries"][0]["customer_name"] == "Garv" and today["entries"][0]["payment_status"] == "PAID"
+
+
+def test_buy_by_voice_lists_vendors_asks_budget_and_vendor(client, auth):
+    before = stock("ATTA10")
+    r = say(client, auth, "Saathi, mujhe atta kharidna hai")
+    assert r["action"] == "ASKED" and r["sale"]["question"] == "BUY_BUDGET"
+    assert "Gupta Distributors" in r["reply"] and "Metro Wholesale" in r["reply"] and "Kitne rupaye" in r["reply"]
+    r = say(client, auth, "5000 se 6000 rupaye", followup=True)
+    assert r["sale"]["question"] == "BUY_VENDOR" and "15 bag = ₹5,700" in r["reply"]
+    r = say(client, auth, "approve kar do", followup=True)
+    assert r["action"] == "ASKED" and "tap karke" in r["reply"]  # a spoken approve never approves
+    r = say(client, auth, "Gupta wala", followup=True)
+    assert r["action"] == "ASKED" and "Kaunsa" in r["reply"]  # Gupta has two atta brands
+    r = say(client, auth, "Shree Chakki", followup=True)
+    assert r["action"] == "RECORDED" and "15 bag, ₹5,700 ka order taiyar hai" in r["reply"] and "Approve dabaiye" in r["reply"]
+    tasks = client.get("/api/v1/tasks", headers=auth).json()
+    task = next(t for t in tasks if t["title"].startswith("Buy 15 × Shree Chakki Atta"))
+    assert task["state"] == "AWAITING_APPROVAL" and stock("ATTA10") == before  # nothing ordered yet
+    events = [e["kind"] for e in client.get("/api/v1/live?after=0&wait=0", headers=auth).json()["events"]]
+    assert "APPROVAL_NEEDED" in events
+    assert client.get("/api/v1/soundbox/today", headers=auth).json()["bills"] == 0  # a purchase is not a counter bill
+
+
+def test_buy_with_budget_in_one_sentence(client, auth):
+    r = say(client, auth, "Saathi, 6 hazaar ka cheeni mangwa do")
+    assert r["sale"]["question"] == "BUY_VENDOR" and "sirf 60 available" in r["reply"]
+    r = say(client, auth, "sasta wala", followup=True)
+    assert r["action"] == "RECORDED" and "Loose Sugar" in r["reply"] and "60 pack, ₹2,340" in r["reply"]
+
+
+def test_sale_to_customer_is_not_a_purchase(client, auth):
+    r = say(client, auth, "Saathi, Garv ne atta khareeda cash mein")
+    assert r["action"] == "RECORDED" and r["sale"]["kind"] == "SALE"
+
+
+def test_approving_announces_on_the_soundbox(client, auth):
+    say(client, auth, "Saathi, 6 hazaar ka cheeni mangwa do")
+    say(client, auth, "sasta wala", followup=True)
+    task = next(t for t in client.get("/api/v1/tasks", headers=auth).json() if t["title"].startswith("Buy 60"))
+    detail = client.get(f"/api/v1/tasks/{task['id']}", headers=auth).json()
+    approval = next(a for a in detail["approvals"] if a["status"] == "PENDING")
+    from tests.conftest import idem
+    ok = client.post(f"/api/v1/approvals/{approval['id']}/confirm", headers={**auth, **idem()})
+    assert ok.status_code == 200, ok.text
+    approved = [e for e in client.get("/api/v1/live?after=0&wait=0", headers=auth).json()["events"] if e["kind"] == "APPROVED"]
+    assert approved and "approval mil gaya" in approved[0]["announce"]
+
+
+def test_questions_about_stock_shortage_loan_and_udhaar(client, auth):
+    r = say(client, auth, "Saathi, dukaan mein kya kya kam hai?")
+    assert r["action"] == "ANSWERED" and "item kam hain" in r["reply"] and "Atta 2 bacha" in r["reply"]
+    r = say(client, auth, "Saathi, loan kitna bacha hai?")
+    assert "₹18,400 baaki" in r["reply"] and "Roz ₹300" in r["reply"]
+    r = say(client, auth, "Saathi, kitna udhaar baaki hai total?")
+    assert r["action"] == "ANSWERED" and "₹1,850" in r["reply"]
+    r = say(client, auth, "Saathi, atta kitna bacha hai?")
+    assert "Atta: 2 packs bache hain" in r["reply"]
+
+
+def test_restock_and_brief_through_the_soundbox(client, auth):
+    r = say(client, auth, "Saathi, weekend ke liye 5000 ke andar stock arrange karo")
+    assert r["action"] == "ANSWERED" and r["task_id"] and "Approve dabaiye" in r["reply"]
+    r = say(client, auth, "Saathi, aaj ka brief batao")
+    assert r["action"] == "ANSWERED" and "1." in r["reply"]

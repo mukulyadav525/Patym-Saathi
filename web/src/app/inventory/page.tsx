@@ -1,10 +1,11 @@
 "use client";
 
-import { AlertTriangle, ArrowLeftRight } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, PackagePlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { AddProductForm } from "@/components/AddProduct";
 import { Badge, Button, Card, ErrorBox, PageTitle, Skeleton, useLoad } from "@/components/ui";
 import { api, ApiError, plural, rupees, when } from "@/lib/api";
 
@@ -16,6 +17,8 @@ export default function Inventory() {
   const low = (data ?? []).filter((i) => i.low);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<string | null>(null);
 
   // Same request as saying it to Saathi: drafts a plan that waits for approval; nothing is ordered here.
   const planRestock = async () => {
@@ -33,7 +36,20 @@ export default function Inventory() {
   };
   return (
     <>
-      <PageTitle title="Inventory & vendors" sub="Stock and cost price change only when goods are received — never when an order is placed." />
+      <PageTitle title="Inventory & vendors" sub="Stock and cost price change only when goods are received — never when an order is placed."
+        right={!adding && <Button onClick={() => { setAdding(true); setAdded(null); }}><PackagePlus className="size-4" /> Add product</Button>} />
+      {adding && (
+        <AddProductForm title="Add a product" note="Saathi finds it by name straight away: on the Soundbox, in bills and in questions."
+          onClose={() => setAdding(false)}
+          onSubmit={async (d) => {
+            const item = await api.addProduct({ name: d.name.trim(), name_hi: d.name_hi.trim() || null, pack_label: d.pack_label.trim() || "1 pack",
+              sell_price: d.sell_price, opening_stock: Number(d.opening_stock || 0), cost_price: d.cost_price || null });
+            setAdding(false);
+            setAdded(`${item.name} (${item.pack_label}) added with ${item.usable_packs} in stock.`);
+            void reload();
+          }} />
+      )}
+      {added && <p className="reply-in mb-4 rounded-xl bg-green-soft px-4 py-3 text-sm font-semibold text-green">{added}</p>}
       {error && !data ? <ErrorBox error={error} onRetry={reload} /> : !data ? <Skeleton /> : (
         <>
           {low.length > 0 && (

@@ -3,6 +3,7 @@
 import { CheckCircle2, Minus, Plus, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 
+import { AddProductForm } from "@/components/AddProduct";
 import { Badge, Button, Card, PageTitle, StateBadge, useLoad } from "@/components/ui";
 import { api, ApiError, plural, rupees, when, type S } from "@/lib/api";
 
@@ -16,9 +17,12 @@ export default function Bills() {
   const [lines, setLines] = useState<Line[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [newItems, setNewItems] = useState<S["NewBillItem"][]>([]);
+  const [adding, setAdding] = useState<S["NewBillItem"] | null>(null);
 
-  const load = (r: S["ReceiptOut"]) => {
+  const load = (r: S["ReceiptOut"], fresh = true) => {
     setDraft(r);
+    if (fresh) setNewItems(r.new_items ?? []);
     setLines(r.lines.map((l) => ({ product_id: l.product_id, name: l.name, pack_label: l.pack_label, packs: l.packs, unit_price: l.unit_price ?? null })));
   };
   const run = async (label: string, fn: () => Promise<void>) => {
@@ -80,8 +84,38 @@ export default function Bills() {
                   <button aria-label={`Remove ${l.name}`} onClick={() => setLines(lines.filter((_, j) => j !== i))} className="p-2 text-red"><Trash2 className="size-4" /></button>
                 </div>
               ))}
-              {draft.unmatched.length > 0 && (
-                <div className="mt-3 rounded-xl bg-amber-soft p-3 text-xs"><p className="font-bold text-amber">Not recognised (ignored):</p>{draft.unmatched.map((u, i) => <p key={i} className="truncate text-ink-soft">• {u}</p>)}</div>
+              {newItems.length > 0 && !adding && (
+                <div className="mt-3 rounded-xl bg-amber-soft p-3">
+                  <p className="text-xs font-bold text-amber">New on this bill: not in your inventory yet</p>
+                  {newItems.map((n) => (
+                    <div key={n.source_text} className="flex items-center gap-3 py-2 text-sm">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold">{n.name || n.source_text}</p>
+                        <p className="num truncate text-xs text-ink-soft">{n.pack_label} · {n.packs} packs{n.unit_price ? ` · ${rupees(n.unit_price)} each` : ""}</p>
+                      </div>
+                      <Button kind="secondary" onClick={() => setAdding(n)}>Add to inventory</Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {adding && (
+                <div className="mt-3">
+                  <AddProductForm title={`Add ${adding.name || "new item"}`} stockLabel="Packs on this bill" submitLabel="Add item and put it on the bill"
+                    note="Set your selling price. Its stock and cost price arrive when you confirm this bill."
+                    initial={{ name: adding.name, pack_label: adding.pack_label, cost_price: adding.unit_price ?? "",
+                      sell_price: adding.suggested_sell_price ? String(Number(adding.suggested_sell_price)) : "", opening_stock: String(adding.packs) }}
+                    onClose={() => setAdding(null)}
+                    onSubmit={async (d) => {
+                      const r = await api.billNewItem(draft.id, { name: d.name.trim(), name_hi: d.name_hi.trim() || null,
+                        pack_label: d.pack_label.trim() || "1 pack", sell_price: d.sell_price, packs: Math.max(1, Number(d.opening_stock || 1)),
+                        unit_price: d.cost_price || null });
+                      const line = r.lines[r.lines.length - 1];
+                      setLines((cur) => [...cur, { product_id: line.product_id, name: line.name, pack_label: line.pack_label, packs: line.packs, unit_price: line.unit_price ?? null }]);
+                      setNewItems((cur) => cur.filter((x) => x.source_text !== adding.source_text));
+                      setDraft(r);
+                      setAdding(null);
+                    }} />
+                </div>
               )}
               {draft.bill_total && <p className="num mt-2 text-xs text-muted">Bill printed total {rupees(draft.bill_total)} · lines read {rupees(draft.total)}</p>}
               <div className="mt-4 flex gap-2">

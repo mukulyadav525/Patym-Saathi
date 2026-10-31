@@ -828,6 +828,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/bills/{receipt_id}/new-item": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bill New Item
+         * @description Add an item the bill has but the shop doesn't list yet; it joins this draft bill as a line.
+         */
+        post: operations["bill_new_item_api_v1_bills__receipt_id__new_item_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Product
+         * @description Add an item to the shop's list by hand (Inventory -> Add product).
+         */
+        post: operations["add_product_api_v1_products_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/bills/{receipt_id}/confirm": {
         parameters: {
             query?: never;
@@ -1468,7 +1508,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "SALE" | "RETURN" | "PAYMENT";
+            kind: "SALE" | "RETURN" | "PAYMENT" | "BUY";
             /** Customer Name */
             customer_name: string | null;
             /** Lines */
@@ -1834,6 +1874,39 @@ export interface components {
             /** Locality */
             locality: string;
         };
+        /** NewBillItem */
+        NewBillItem: {
+            /** Source Text */
+            source_text: string;
+            /** Name */
+            name: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price: string | null;
+            /** Suggested Sell Price */
+            suggested_sell_price: string | null;
+        };
+        /** NewBillItemIn */
+        NewBillItemIn: {
+            /** Name */
+            name: string;
+            /** Name Hi */
+            name_hi?: string | null;
+            /**
+             * Pack Label
+             * @default 1 pack
+             */
+            pack_label: string;
+            /** Sell Price */
+            sell_price: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price?: string | null;
+        };
         /** OfferOut */
         OfferOut: {
             /** Id */
@@ -2056,6 +2129,27 @@ export interface components {
             /** From Sell Price */
             from_sell_price: string;
         };
+        /** ProductIn */
+        ProductIn: {
+            /** Name */
+            name: string;
+            /** Name Hi */
+            name_hi?: string | null;
+            /**
+             * Pack Label
+             * @default 1 pack
+             */
+            pack_label: string;
+            /** Sell Price */
+            sell_price: string;
+            /**
+             * Opening Stock
+             * @default 0
+             */
+            opening_stock: number;
+            /** Cost Price */
+            cost_price?: string | null;
+        };
         /** ProfitItem */
         ProfitItem: {
             /** Product Id */
@@ -2236,6 +2330,12 @@ export interface components {
             unmatched: string[];
             /** Bill Total */
             bill_total?: string | null;
+            /**
+             * New Items
+             * @description Unrecognised lines read as items the merchant can add
+             * @default []
+             */
+            new_items: components["schemas"]["NewBillItem"][];
         };
         /** ReceiptTextRequest */
         ReceiptTextRequest: {
@@ -2372,6 +2472,11 @@ export interface components {
              */
             understood_by: string;
             sale?: components["schemas"]["CounterSaleOut"] | null;
+            /**
+             * Task Id
+             * @description A plan or purchase this created; it waits for approval in the app
+             */
+            task_id?: string | null;
         };
         /** SoundboxTextIn */
         SoundboxTextIn: {
@@ -4276,6 +4381,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bill_new_item_api_v1_bills__receipt_id__new_item_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                receipt_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewBillItemIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_product_api_v1_products_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProductIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryItem"];
                 };
             };
             /** @description Validation Error */
