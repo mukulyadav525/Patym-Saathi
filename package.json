@@ -9,7 +9,7 @@
     "web": "npm --prefix web run dev",
     "mobile": "npm --prefix mobile start",
     "api:prod": "cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-access-log",
-    "web:prod": "npm --prefix web run build && npm --prefix web run start -- -p 3000",
+    "web:prod": "npm --prefix web run build && npm --prefix web run start -- -p 3000 -H 0.0.0.0",
     "soundbox": "node scripts/soundbox-https.mjs",
     "stop": "for port in 8000 3000 3443; do pids=$(lsof -tiTCP:$port -sTCP:LISTEN); [ -n \"$pids\" ] && kill -9 $pids; done; echo stopped"
   },
