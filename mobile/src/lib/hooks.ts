@@ -3,6 +3,7 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { ApiError } from "./api";
+import { onLive } from "./liveBus";
 
 export function useOnline() {
   const [online, setOnline] = useState(true);
@@ -50,6 +51,9 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
     setLoading(false);
     setRefreshing(false);
   }, []);
+
+  // Something happened at the counter (Soundbox entry, QR payment): refresh quietly, no spinner.
+  useEffect(() => onLive(() => void run()), [run]);
 
   useFocusEffect(
     useCallback(() => {

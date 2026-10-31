@@ -21,6 +21,7 @@ export default function Overview() {
   const tasks = useLoad(api.tasks, [], 15000);
   const audit = useLoad(() => api.audit(), [], 15000);
   const growth = useLoad(api.growth, [], 30000);
+  const counter = useLoad(api.soundboxToday);
   const [text, setText] = useState("");
   const [reply, setReply] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -235,6 +236,39 @@ export default function Overview() {
             </div>
 
             <div className="space-y-6 lg:col-span-2">
+              <Card>
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="font-extrabold">Counter today</h2>
+                    <p className="text-xs text-muted">Spoken to the Soundbox · updates live</p>
+                  </div>
+                  <MoreLink href="/soundbox">Soundbox</MoreLink>
+                </div>
+                {!counter.data ? <div className="shimmer h-16 rounded-xl" /> : (
+                  <>
+                    <div className="mb-3 grid grid-cols-3 gap-2 text-center">
+                      {[["Sales", counter.data.total_sales], ["UPI", counter.data.upi], ["Khata", counter.data.udhaar]].map(([label, v]) => (
+                        <div key={label} className="rounded-xl bg-bg py-2">
+                          <p className="text-[11px] text-muted">{label}</p>
+                          <p className="num font-extrabold">{rupees(v)}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {counter.data.entries.length === 0 ? <p className="text-sm text-muted">No entries yet. Say “Saathi, atta liya Mukul ne”.</p> : (
+                      <ul className="divide-y divide-line">
+                        {counter.data.entries.slice(0, 4).map((e) => (
+                          <li key={e.id} className={`reply-in flex items-center justify-between gap-3 py-2 text-sm ${e.status === "CANCELLED" ? "text-muted line-through" : ""}`}>
+                            <span className="min-w-0 truncate">
+                              <b>{e.customer_name ?? "Walk-in"}</b> · {e.kind === "PAYMENT" ? "khata payment" : e.lines.map((l) => `${l.name} ×${l.packs}`).join(", ")}
+                            </span>
+                            <span className="num shrink-0 font-bold">{rupees(e.total)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </Card>
               <Card>
                 <h2 className="mb-3 font-extrabold">Connected records</h2>
                 {d.connections.map((c) => (

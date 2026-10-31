@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { ApiError } from "@/lib/api";
+import { onLive } from "@/lib/live";
 
 type Tone = "cyan" | "green" | "amber" | "red" | "violet" | "muted" | "navy";
 const TONE: Record<Tone, string> = {
@@ -167,5 +168,7 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = [], pollM
     const t = setInterval(() => void run(), pollMs);
     return () => clearInterval(t);
   }, [run, pollMs, depKey]);
+  // Something happened at the counter (Soundbox entry, QR payment): refresh now instead of at the next poll.
+  useEffect(() => onLive(() => void run()), [run]);
   return { data, setData, error, reload: run };
 }

@@ -17,6 +17,7 @@ Android app (Expo) + web dashboard (Next.js) share one FastAPI backend and one P
 | Paytm for Business home (Android): Saathi as the NEW first tile, QR/Soundbox/Card/Loan pages, profile menu (settlements, notifications, Hindi/English, approval PIN, legal) | ✅ product pages are labelled prototype screens |
 | Approval safety extras: optional 4-digit approval PIN (hashed, 5 tries → 10-min lock), renew an expired approval for the unchanged payload, read-back built from stored records | ✅ tested |
 | **Grow with Saathi** (Android grid + web pages): Diwali/festival restock from last festival's sales, Hindi voice brief, Saathi impact, slow stock → customer offers (8 languages via Mayura), proactive Saathi check, 14-day cash-flow forecast, khata insights with suggested credit limits, supplier bill → stock (photo via Sarvam Document AI or typed), nearby-store benchmarks | ✅ computed from records, 69 backend tests; Sarvam parts need the key |
+| **Soundbox & QR** (iPad, `/soundbox`): “Saathi, atta liya Mukul ne” → Sarvam STT + LLM → stock −1, bill SB-0001, khata credit or linked QR payment; asks back (“paise diye ya udhaar?”), undo, DEMO QR pay page + spoken “Paytm par ₹… prapt hue”; phone app and dashboard update live | ✅ end-to-end, 34 tests; voice needs the Sarvam key and https on the iPad |
 | Voice input (Sarvam STT) and read-back audio (Bulbul) | Built; **needs `SARVAM_API_KEY`**, otherwise text input and text read-back |
 | Paytm staging adapter (Create Link, Transaction Status v3, CHECKSUMHASH callbacks via `paytmchecksum`) | **Built to staging spec, tested with recorded mocks only**; set `PAYTM_ENV=staging`, `PAYTM_MID`, `PAYTM_MERCHANT_KEY` |
 
@@ -49,6 +50,43 @@ npm run web:prod    # production build of the dashboard on :3000
 Ask anything about the shop (“atta kitna bacha hai?”, “Aman ka kitna baaki hai?”, “pichhle hafte kitni bikri hui?”):
 common questions are answered instantly from records; others by Sarvam with only this shop's data, and any number not in
 the records is rejected. Answers are spoken back. Orders and payment links still need an on-screen approval.
+
+## Soundbox & QR on an iPad (counter prototype)
+
+A Paytm QR standee + Soundbox at `/soundbox`, meant for an iPad on the counter. The shopkeeper never opens the app:
+they say **“Saathi, atta liya Mukul ne”** and the books update; the phone app and the dashboard show it within a second.
+
+```bash
+npm run api:prod     # API (Sarvam key in backend/.env)
+npm run web:prod     # dashboard on :3000 (forwards /api/v1 to the API)
+npm run soundbox     # https on :3443 for the iPad; prints the address and first-time steps
+```
+
+iPad Safari allows the microphone only on https. `npm run soundbox` makes a local certificate authority
+(`certs/saathi-local-ca.pem`) and a certificate for the laptop's Wi-Fi address. Once per iPad: AirDrop the `.pem`,
+install the profile (Settings → General → VPN & Device Management), then enable full trust (Settings → General → About
+→ Certificate Trust Settings). Open the printed `https://<laptop-ip>:3443/soundbox`, sign in, tap **Start**, allow the mic.
+Phone, iPad and laptop must be on the same Wi-Fi; if the laptop's address changes, use **Change** under the sign-in
+form in the app.
+
+How it works:
+- **Listening:** the page detects sentences on the iPad and sends each one (16 kHz WAV) to the API; silence is never sent.
+  Sarvam Saaras transcribes it; only sentences that *start* with “Saathi” (also heard as “Saath hi”, “Sarthi”) are
+  acted on. A short answer to Saathi's own question (“udhaar”, “haan”) needs no wake word.
+- **Understanding:** the Sarvam LLM turns the sentence into intent, items, quantities, customer and payment. Its output is
+  checked: items must be in the catalog (prices from the catalog), customers from the khata, amounts must be in what was
+  said, and the payment mode only comes from words actually spoken. Without the LLM a rule parser takes over.
+- **Asking back:** “Paise diye ya udhaar likhun?”, “Kaunse Mukul?”, “Rohan naye customer hain. Unka khata kholun?”.
+  A QR payment of the same amount answers “paise diye?” by itself.
+- **Recording:** stock moves, the khata gets a credit or payment, the QR payment is linked, a bill number (SB-0001…) is
+  given, with an audit event and a live event, in one transaction. “Saathi, cancel karo” or **Undo** reverses exactly
+  that (30 minutes).
+- **QR (DEMO):** the QR opens a practice pay page on the laptop; paying there (or **Customer pays** on the iPad) makes the
+  Soundbox ding and say “Paytm par ₹420 prapt hue” with Sarvam Bulbul. No real money moves.
+- **Live:** `/api/v1/live` is a long-poll feed; the app and the dashboard refresh their data and show a banner on each entry.
+
+Try: “Saathi, atta liya Mukul ne” → “udhaar” · “Saathi, Priya ko do kilo cheeni di, paise de diye” ·
+“Saathi, Mukul ne 200 diye” · “Saathi, Mukul ne atta wapas kiya” · “Saathi, atta kitna bacha hai?” · “Saathi, cancel karo”.
 
 ## Run locally
 

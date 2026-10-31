@@ -180,6 +180,8 @@ export default function Home() {
             ]}
           />
 
+          <CounterToday />
+
           {g && (Number(g.impact.under_budget) + Number(g.impact.supplier_savings) > 0 || g.impact.payments_collected > 0) && (
             <Card onPress={() => router.push("/grow/impact")} style={s.impact}>
               <Row>
@@ -225,7 +227,80 @@ export default function Home() {
   );
 }
 
+const MODE: Record<string, string> = { UPI: "Paytm UPI", CASH: "Cash", UDHAAR: "Khata" };
+
+// What was said to the counter Soundbox today. Updates live (useLoad reloads on every counter event).
+function CounterToday() {
+  const { data, reload } = useLoad(api.soundboxToday);
+  const [busy, setBusy] = useState<string | null>(null);
+  if (!data) return null;
+  const undo = (id: string, bill: string | null) =>
+    Alert.alert(`Undo ${bill ?? "entry"}?`, "Stock, khata and the payment link go back to how they were.", [
+      { text: "Keep", style: "cancel" },
+      {
+        text: "Undo", style: "destructive", onPress: async () => {
+          setBusy(id);
+          try {
+            await api.soundboxUndo(id);
+            await reload();
+          } catch (e) {
+            Alert.alert("Couldn't undo", e instanceof ApiError ? e.message : String(e));
+          } finally {
+            setBusy(null);
+          }
+        },
+      },
+    ]);
+  return (
+    <Card style={{ marginTop: 4 }}>
+      <Row style={{ justifyContent: "space-between", marginBottom: 10 }}>
+        <View style={{ flex: 1 }}>
+          <Txt style={ui.h3}>Counter today</Txt>
+          <Txt style={ui.muted}>Spoken to the Soundbox · live</Txt>
+        </View>
+        <Ionicons name="volume-high-outline" size={20} color={colors.cyan} />
+      </Row>
+      <Row style={{ gap: 8, marginBottom: data.entries.length ? 8 : 0 }}>
+        {[["Sales", data.total_sales], ["UPI", data.upi], ["Khata", data.udhaar]].map(([label, v]) => (
+          <View key={label} style={s.counterStat}>
+            <Txt style={{ fontSize: 11, color: colors.muted }}>{label}</Txt>
+            <Txt style={{ fontWeight: "800", fontSize: 16 }} numberOfLines={1}>{rupees(v)}</Txt>
+          </View>
+        ))}
+      </Row>
+      {data.entries.length === 0 ? (
+        <Txt style={[ui.muted, { marginTop: 8 }]}>Shop counter par bolein: “Saathi, atta liya Mukul ne”.</Txt>
+      ) : data.entries.slice(0, 4).map((e) => {
+        const cancelled = e.status === "CANCELLED";
+        return (
+          <Row key={e.id} style={s.counterRow}>
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Txt style={[{ fontWeight: "700" }, cancelled && s.struck]} numberOfLines={1}>
+                {e.customer_name ?? "Walk-in"} · {e.kind === "PAYMENT" ? "khata payment" : e.lines.map((l) => `${l.name} ×${l.packs}`).join(", ")}
+              </Txt>
+              <Txt style={[ui.muted, { fontSize: 11 }]}>
+                {e.bill_number} · {cancelled ? "undone" : e.payment_status === "AWAITED" ? "UPI awaited" : MODE[e.payment_mode ?? ""] ?? ""}
+              </Txt>
+            </View>
+            <Txt style={[{ fontWeight: "800" }, cancelled && s.struck]}>{rupees(e.total)}</Txt>
+            {e.can_undo && (
+              <Pressable onPress={() => undo(e.id, e.bill_number)} disabled={busy === e.id} hitSlop={8} style={s.undo}
+                accessibilityRole="button" accessibilityLabel={`Undo ${e.bill_number}`}>
+                <Ionicons name="arrow-undo-outline" size={16} color={colors.red} />
+              </Pressable>
+            )}
+          </Row>
+        );
+      })}
+    </Card>
+  );
+}
+
 const s = StyleSheet.create({
+  counterStat: { flex: 1, backgroundColor: colors.bg, borderRadius: radius.sm, paddingVertical: 8, paddingHorizontal: 10 },
+  counterRow: { paddingVertical: 9, borderTopWidth: 1, borderTopColor: colors.line },
+  struck: { textDecorationLine: "line-through", color: colors.muted },
+  undo: { marginLeft: 8, width: 30, height: 30, borderRadius: 15, backgroundColor: colors.redSoft, alignItems: "center", justifyContent: "center" },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.cyanSoft, alignItems: "center", justifyContent: "center", marginLeft: 8 },
   demoPill: { flexDirection: "row", alignItems: "center", backgroundColor: colors.violetSoft, borderRadius: radius.pill, paddingHorizontal: 10, paddingVertical: 5 },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.violet, marginRight: 5 },

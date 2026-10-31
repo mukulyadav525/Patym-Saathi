@@ -65,7 +65,8 @@ def quick_answer(db: Session, ctx: Ctx, text: str) -> tuple[str, list[str]] | No
         inv = next(i for p, i in snapshot if p.id == product.id)
         weeks = sales.get(str(product.id), {}).get("weeks", [])
         avg = (Decimal(sum(weeks)) / len(weeks)) if weeks else None
-        line = f"{product.name}: {inv.usable_packs} packs bache hain ({product.pack_label})."
+        line = (f"{product.name}: {inv.usable_packs} pack bacha hai ({product.pack_label})." if inv.usable_packs == 1
+                else f"{product.name}: {inv.usable_packs} packs bache hain ({product.pack_label}).")
         if avg and avg > 0:
             cover = Decimal(inv.usable_packs) / avg
             line += f" Har hafte lagbhag {avg:.0f} bikte hain, " + (

@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.growth_routes import growth_api
 from app.api.routes import VERSION, api, public
+from app.api.soundbox_routes import pay_public, soundbox_api
 from app.config import get_settings
 from app.errors import ApiError
 
@@ -131,3 +132,5 @@ async def validation_error(_: Request, exc: RequestValidationError) -> JSONRespo
 app.include_router(public)
 app.include_router(api)
 app.include_router(growth_api)
+app.include_router(soundbox_api)
+app.include_router(pay_public)

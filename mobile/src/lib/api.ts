@@ -226,5 +226,9 @@ export const api = {
   confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[], supplier?: string) =>
     request<Receipt>("POST", `/api/v1/bills/${id}/confirm`, { lines, supplier_name: supplier ?? null }),
   discardBill: (id: string) => request<Receipt>("POST", `/api/v1/bills/${id}/discard`),
+  soundboxToday: () => request<S["SoundboxToday"]>("GET", "/api/v1/soundbox/today"),
+  soundboxUndo: (saleId: string) => request<S["CounterSaleOut"]>("POST", `/api/v1/soundbox/sales/${saleId}/undo`),
+  live: (after: number | null, wait = 25) =>
+    request<S["LiveOut"]>("GET", `/api/v1/live?wait=${wait}${after == null ? "" : `&after=${after}`}`, undefined, {}, (wait + 10) * 1000),
   newKey,
 };

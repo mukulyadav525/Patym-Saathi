@@ -61,7 +61,7 @@ def test_translate_needs_key_and_rejects_open_text(client, auth):
     assert same["engine"] == "ORIGINAL" and "₹1,200" in same["text"]
     assert client.post("/api/v1/translate", json={"kind": "KHATA", "ref": "Nobody", "target": "ta-IN"},
                        headers=auth).status_code == 404
-    assert len(k["customers"]) == 4
+    assert len(k["customers"]) == 6  # 4 shops + 2 regular walk-in customers
 
 
 def test_cashflow_and_settings(client, auth):

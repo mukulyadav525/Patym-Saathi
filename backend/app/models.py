@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Date,
     DateTime,
@@ -416,3 +417,61 @@ class RateLimit(Base):
     bucket_key: Mapped[str] = mapped_column(String(120))
     window_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     count: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class CounterSale(Base):
+    """One counter entry spoken to the Soundbox: a sale, a return, or a khata payment received.
+    PENDING while Saathi waits for an answer (paid or udhaar? which customer?); stock, khata and payment
+    records change only when it becomes RECORDED, and an undo reverses exactly what was applied."""
+    __tablename__ = "counter_sales"
+    __table_args__ = (UniqueConstraint("merchant_id", "bill_number"),)
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    bill_number: Mapped[str | None] = mapped_column(String(20), nullable=True)  # set when recorded
+    kind: Mapped[str] = mapped_column(String(10))  # SALE | RETURN | PAYMENT
+    customer_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lines: Mapped[list] = mapped_column(JSONB, default=list)  # [{product_id, name, pack_label, packs, unit_price, amount}]
+    total: Mapped[Decimal] = mapped_column(Money)
+    payment_mode: Mapped[str | None] = mapped_column(String(10), nullable=True)  # UPI | CASH | UDHAAR
+    payment_status: Mapped[str | None] = mapped_column(String(10), nullable=True)  # PAID | AWAITED | ON_KHATA
+    status: Mapped[str] = mapped_column(String(12))  # PENDING | RECORDED | CANCELLED
+    question: Mapped[str | None] = mapped_column(String(20), nullable=True)  # PAYMENT | CUSTOMER | NEW_CUSTOMER
+    options: Mapped[list] = mapped_column(JSONB, default=list)
+    new_customer: Mapped[bool] = mapped_column(Boolean, default=False)
+    applied: Mapped[dict] = mapped_column(JSONB, default=dict)  # what recording changed, for an exact undo
+    transcript: Mapped[str] = mapped_column(Text, default="")
+    understood_by: Mapped[str] = mapped_column(String(30), default="")
+    qr_payment_id: Mapped[uuid.UUID | None] = fk("qr_payments.id", nullable=True)
+    khata_entry_id: Mapped[uuid.UUID | None] = fk("khata_entries.id", nullable=True)
+    created_by: Mapped[uuid.UUID | None] = fk("users.id", nullable=True)
+    created_at: Mapped[datetime] = ts()
+    recorded_at: Mapped[datetime | None] = ts(nullable=True)
+    cancelled_at: Mapped[datetime | None] = ts(nullable=True)
+
+
+class QrPayment(Base):
+    """A payment to the shop's QR, announced by the Soundbox. DEMO: made from the demo pay page or the
+    Soundbox's simulate button; a live integration would create these from Paytm's verified callback."""
+    __tablename__ = "qr_payments"
+    id: Mapped[uuid.UUID] = pk()
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    amount: Mapped[Decimal] = mapped_column(Money)
+    payer: Mapped[str] = mapped_column(String(80), default="")
+    txn_id: Mapped[str] = mapped_column(String(40), unique=True)
+    mode: Mapped[str] = mapped_column(String(10), default="DEMO")
+    sale_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
+    created_at: Mapped[datetime] = ts()
+
+
+class LiveEvent(Base):
+    """Ordered per-merchant feed of things that just happened (Soundbox entries, QR payments). The app and the
+    dashboard long-poll it to update within a second; the Soundbox reads payment announcements from it."""
+    __tablename__ = "live_events"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    merchant_id: Mapped[uuid.UUID] = fk("merchants.id")
+    kind: Mapped[str] = mapped_column(String(30))
+    title: Mapped[str] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(String(300), default="")
+    announce: Mapped[str | None] = mapped_column(String(300), nullable=True)  # what the Soundbox says aloud
+    data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    created_at: Mapped[datetime] = ts()

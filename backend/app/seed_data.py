@@ -53,6 +53,9 @@ KHATA = [
     ("Rao General", "+91 90000 0X035", [(-60, "CREDIT", "700", "Rice, dal"), (-52, "PAYMENT", "700", "Cash"),
                                         (-28, "CREDIT", "900", "INV-1035"), (-12, "PAYMENT", "900", "Paytm link")]),
     ("Gupta Sweets", "+91 90000 0X051", [(-15, "CREDIT", "2000", "Sugar, oil for festival"), (-5, "PAYMENT", "1000", "Part payment")]),
+    # Regular walk-in customers with a settled khata (what the Soundbox demo talks about: "atta liya Mukul ne").
+    ("Mukul Yadav", "+91 90000 0X061", [(-21, "CREDIT", "420", "Atta"), (-14, "PAYMENT", "420", "Cash")]),
+    ("Priya Sharma", "+91 90000 0X067", [(-9, "CREDIT", "190", "Sugar, tea"), (-6, "PAYMENT", "190", "UPI")]),
 ]
 
 # Nearby-store benchmark (aggregated, anonymised). sku: peer median packs/week.

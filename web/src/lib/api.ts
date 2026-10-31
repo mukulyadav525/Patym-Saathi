@@ -6,7 +6,10 @@ export type TaskSummary = S["TaskSummary"];
 export type LoginResponse = S["LoginResponse"];
 export type Dashboard = S["DashboardOut"];
 
-export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
+// Same origin by default: Next.js forwards /api/v1 to the FastAPI server (next.config.ts). One origin means the
+// iPad Soundbox works over https on the shop Wi-Fi with no mixed content or CORS. A deployment where the API
+// lives elsewhere sets NEXT_PUBLIC_API_BASE_URL.
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -107,6 +110,18 @@ export const api = {
   confirmBill: (id: string, lines: { product_id: string; packs: number; unit_price: string | null }[]) =>
     request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/confirm`, { lines }),
   discardBill: (id: string) => request<S["ReceiptOut"]>("POST", `/api/v1/bills/${id}/discard`),
+  soundboxListen: (form: FormData) => request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/listen", form, {}, SLOW_MS),
+  soundboxText: (text: string, followup = false, speak = true) =>
+    request<S["SoundboxResult"]>("POST", "/api/v1/soundbox/text", { text, followup, speak }, {}, SLOW_MS),
+  soundboxToday: () => request<S["SoundboxToday"]>("GET", "/api/v1/soundbox/today"),
+  soundboxQr: () => request<S["SoundboxQr"]>("GET", "/api/v1/soundbox/qr"),
+  soundboxUndo: (saleId: string) => request<S["CounterSaleOut"]>("POST", `/api/v1/soundbox/sales/${saleId}/undo`),
+  soundboxPay: (amount: string, payer = "") => request<S["QrPaymentOut"]>("POST", "/api/v1/soundbox/qr-payments", { amount, payer }),
+  announcement: (eventId: number) => request<S["AudioOut"]>("GET", `/api/v1/soundbox/announcements/${eventId}`, undefined, {}, SLOW_MS),
+  live: (after: number | null, wait = 25) =>
+    request<S["LiveOut"]>("GET", `/api/v1/live?wait=${wait}${after == null ? "" : `&after=${after}`}`, undefined, {}, (wait + 10) * 1000),
+  payInfo: (token: string) => request<S["PayPageInfo"]>("GET", `/api/v1/pay/${token}`),
+  pay: (token: string, amount: string, payer: string) => request<S["QrPaymentOut"]>("POST", `/api/v1/pay/${token}`, { amount, payer }),
 };
 
 /** "19 Oct" from an ISO date. */

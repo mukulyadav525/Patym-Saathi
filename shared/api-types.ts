@@ -862,6 +862,179 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/soundbox/listen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Listen
+         * @description One utterance the Soundbox heard. Without "Saathi" (and no open question) it is ignored, unspoken.
+         */
+        post: operations["listen_api_v1_soundbox_listen_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Say Text
+         * @description Typed command (testing, or a noisy shop). Same pipeline after speech-to-text.
+         */
+        post: operations["say_text_api_v1_soundbox_text_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Today */
+        get: operations["today_api_v1_soundbox_today_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/sales/{sale_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo */
+        post: operations["undo_api_v1_soundbox_sales__sale_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/qr": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Qr Info */
+        get: operations["qr_info_api_v1_soundbox_qr_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/qr-payments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Payment
+         * @description 'Customer pays' button on the Soundbox (DEMO).
+         */
+        post: operations["simulate_payment_api_v1_soundbox_qr_payments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/soundbox/announcements/{event_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Announcement
+         * @description Spoken audio for a live event's announcement ("Paytm par ₹420 prapt hue"). Only server-written text is spoken.
+         */
+        get: operations["announcement_api_v1_soundbox_announcements__event_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/live": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Live Feed
+         * @description Long-poll: returns as soon as there are events newer than `after`, or empty after `wait` seconds.
+         *     Without `after` it returns the current cursor, so a client starts from now.
+         */
+        get: operations["live_feed_api_v1_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pay/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Pay Info */
+        get: operations["pay_info_api_v1_pay__token__get"];
+        put?: never;
+        /**
+         * Pay
+         * @description A customer 'pays' from their phone after scanning the shop QR. DEMO: no money moves.
+         */
+        post: operations["pay_api_v1_pay__token__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -948,6 +1121,18 @@ export interface components {
             /** Speech */
             speech?: string | null;
         };
+        /** AudioOut */
+        AudioOut: {
+            /** Audio */
+            audio: string;
+            /**
+             * Mime
+             * @default audio/mpeg
+             */
+            mime: string;
+            /** Text */
+            text: string;
+        };
         /** AuditOut */
         AuditOut: {
             /** Id */
@@ -1026,6 +1211,21 @@ export interface components {
             file: string;
             /** Supplier Name */
             supplier_name?: string | null;
+        };
+        /** Body_listen_api_v1_soundbox_listen_post */
+        Body_listen_api_v1_soundbox_listen_post: {
+            /** Audio */
+            audio: string;
+            /**
+             * Followup
+             * @default false
+             */
+            followup: boolean;
+            /**
+             * Speak
+             * @default true
+             */
+            speak: boolean;
         };
         /** Brief */
         Brief: {
@@ -1153,6 +1353,72 @@ export interface components {
             consent_granted_at: string | null;
             /** Last Sync At */
             last_sync_at: string | null;
+        };
+        /** CounterLine */
+        CounterLine: {
+            /** Product Id */
+            product_id: string;
+            /**
+             * Sku
+             * @default
+             */
+            sku: string;
+            /** Name */
+            name: string;
+            /** Pack Label */
+            pack_label: string;
+            /** Packs */
+            packs: number;
+            /** Unit Price */
+            unit_price: string;
+            /** Amount */
+            amount: string;
+        };
+        /** CounterSaleOut */
+        CounterSaleOut: {
+            /** Id */
+            id: string;
+            /** Bill Number */
+            bill_number: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "SALE" | "RETURN" | "PAYMENT";
+            /** Customer Name */
+            customer_name: string | null;
+            /** Lines */
+            lines: components["schemas"]["CounterLine"][];
+            /** Total */
+            total: string;
+            /** Payment Mode */
+            payment_mode: ("UPI" | "CASH" | "UDHAAR") | null;
+            /** Payment Status */
+            payment_status: ("PAID" | "AWAITED" | "ON_KHATA") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PENDING" | "RECORDED" | "CANCELLED";
+            /** Question */
+            question: string | null;
+            /** Options */
+            options: string[];
+            /** New Customer */
+            new_customer: boolean;
+            /** Transcript */
+            transcript: string;
+            /** Understood By */
+            understood_by: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Recorded At */
+            recorded_at: string | null;
+            /** Can Undo */
+            can_undo: boolean;
         };
         /** DashboardOut */
         DashboardOut: {
@@ -1411,6 +1677,35 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** LiveEventOut */
+        LiveEventOut: {
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Body */
+            body: string;
+            /** Announce */
+            announce: string | null;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** LiveOut */
+        LiveOut: {
+            /** Cursor */
+            cursor: number;
+            /** Events */
+            events: components["schemas"]["LiveEventOut"][];
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -1519,6 +1814,15 @@ export interface components {
             /** Next Cursor */
             next_cursor: string | null;
         };
+        /** PayPageInfo */
+        PayPageInfo: {
+            /** Shop Name */
+            shop_name: string;
+            /** Locality */
+            locality: string;
+            /** Mode */
+            mode: string;
+        };
         /** PlanDiff */
         PlanDiff: {
             /** Name */
@@ -1602,6 +1906,40 @@ export interface components {
             festival_evidence: {
                 [key: string]: unknown;
             }[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** QrPaymentIn */
+        QrPaymentIn: {
+            /** Amount */
+            amount: string;
+            /**
+             * Payer
+             * @default
+             */
+            payer: string;
+        };
+        /** QrPaymentOut */
+        QrPaymentOut: {
+            /** Id */
+            id: string;
+            /** Amount */
+            amount: string;
+            /** Payer */
+            payer: string;
+            /** Txn Id */
+            txn_id: string;
+            /** Mode */
+            mode: string;
+            /** Sale Id */
+            sale_id: string | null;
+            /** Bill Number */
+            bill_number: string | null;
+            /** Customer Name */
+            customer_name: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1760,6 +2098,94 @@ export interface components {
             offer_price: string;
             /** Reason */
             reason: string;
+        };
+        /** SoundboxQr */
+        SoundboxQr: {
+            /**
+             * Pay Path
+             * @description Path of the DEMO pay page, relative to the dashboard origin
+             */
+            pay_path: string;
+            /** Shop Name */
+            shop_name: string;
+            /** Upi Label */
+            upi_label: string;
+            /** Mode */
+            mode: string;
+        };
+        /** SoundboxResult */
+        SoundboxResult: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "IGNORED" | "LISTENING" | "RECORDED" | "ASKED" | "CANCELLED" | "ANSWERED" | "NOT_UNDERSTOOD";
+            /**
+             * Heard
+             * @description What speech-to-text heard (empty for typed input)
+             */
+            heard: string;
+            /**
+             * Command
+             * @description What was said after the wake word
+             */
+            command: string;
+            /** Reply */
+            reply: string;
+            /** Speech */
+            speech?: string | null;
+            /**
+             * Audio
+             * @description Base64 MP3 of the spoken reply
+             */
+            audio?: string | null;
+            /**
+             * Expects Reply
+             * @default false
+             */
+            expects_reply: boolean;
+            /**
+             * Understood By
+             * @default
+             */
+            understood_by: string;
+            sale?: components["schemas"]["CounterSaleOut"] | null;
+        };
+        /** SoundboxTextIn */
+        SoundboxTextIn: {
+            /** Text */
+            text: string;
+            /**
+             * Followup
+             * @description Answer to Saathi's last question; no wake word needed
+             * @default false
+             */
+            followup: boolean;
+            /**
+             * Speak
+             * @default true
+             */
+            speak: boolean;
+        };
+        /** SoundboxToday */
+        SoundboxToday: {
+            /** Total Sales */
+            total_sales: string;
+            /** Upi */
+            upi: string;
+            /** Cash */
+            cash: string;
+            /** Udhaar */
+            udhaar: string;
+            /** Khata Collected */
+            khata_collected: string;
+            /** Bills */
+            bills: number;
+            /** Entries */
+            entries: components["schemas"]["CounterSaleOut"][];
+            pending: components["schemas"]["CounterSaleOut"] | null;
+            /** Payments */
+            payments: components["schemas"]["QrPaymentOut"][];
         };
         /** SpeechOut */
         SpeechOut: {
@@ -3612,6 +4038,339 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceiptOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listen_api_v1_soundbox_listen_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_listen_api_v1_soundbox_listen_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoundboxResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    say_text_api_v1_soundbox_text_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SoundboxTextIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoundboxResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    today_api_v1_soundbox_today_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoundboxToday"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_api_v1_soundbox_sales__sale_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                sale_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CounterSaleOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    qr_info_api_v1_soundbox_qr_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoundboxQr"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_payment_api_v1_soundbox_qr_payments_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QrPaymentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QrPaymentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    announcement_api_v1_soundbox_announcements__event_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AudioOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live_feed_api_v1_live_get: {
+        parameters: {
+            query?: {
+                after?: number | null;
+                wait?: number;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_info_api_v1_pay__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayPageInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pay_api_v1_pay__token__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QrPaymentIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QrPaymentOut"];
                 };
             };
             /** @description Validation Error */

@@ -19,6 +19,8 @@ LIMITS: dict[str, tuple[int, int]] = {
     "bill_scan": (40, 3600),      # Document AI jobs
     "assistant": (600, 3600),     # may call the LLM
     "scan": (60, 3600),           # proactive check
+    "soundbox": (1500, 3600),     # always-on counter listening: every utterance is transcribed to find "Saathi"
+    "qr_pay": (300, 3600),        # DEMO QR payments
 }
 
 

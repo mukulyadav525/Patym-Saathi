@@ -568,3 +568,116 @@ class ReceiptLineIn(BaseModel):
 class ConfirmReceiptRequest(BaseModel):
     lines: list[ReceiptLineIn] = Field(min_length=1, max_length=60)
     supplier_name: str | None = Field(default=None, max_length=120)
+
+
+# --- Soundbox (counter voice + QR) ---------------------------------------------------------------------------
+
+class SoundboxTextIn(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+    followup: bool = Field(default=False, description="Answer to Saathi's last question; no wake word needed")
+    speak: bool = True
+
+
+class CounterLine(BaseModel):
+    product_id: str
+    sku: str = ""
+    name: str
+    pack_label: str
+    packs: int
+    unit_price: MoneyStr
+    amount: MoneyStr
+
+
+class CounterSaleOut(BaseModel):
+    id: str
+    bill_number: str | None
+    kind: Literal["SALE", "RETURN", "PAYMENT"]
+    customer_name: str | None
+    lines: list[CounterLine]
+    total: MoneyStr
+    payment_mode: Literal["UPI", "CASH", "UDHAAR"] | None
+    payment_status: Literal["PAID", "AWAITED", "ON_KHATA"] | None
+    status: Literal["PENDING", "RECORDED", "CANCELLED"]
+    question: str | None
+    options: list[str]
+    new_customer: bool
+    transcript: str
+    understood_by: str
+    created_at: datetime
+    recorded_at: datetime | None
+    can_undo: bool
+
+
+class SoundboxResult(BaseModel):
+    action: Literal["IGNORED", "LISTENING", "RECORDED", "ASKED", "CANCELLED", "ANSWERED", "NOT_UNDERSTOOD"]
+    heard: str = Field(description="What speech-to-text heard (empty for typed input)")
+    command: str = Field(description="What was said after the wake word")
+    reply: str
+    speech: str | None = None
+    audio: str | None = Field(default=None, description="Base64 MP3 of the spoken reply")
+    expects_reply: bool = False
+    understood_by: str = ""
+    sale: CounterSaleOut | None = None
+
+
+class QrPaymentIn(BaseModel):
+    amount: str = Field(max_length=12)
+    payer: str = Field(default="", max_length=60)
+
+
+class QrPaymentOut(BaseModel):
+    id: str
+    amount: MoneyStr
+    payer: str
+    txn_id: str
+    mode: str
+    sale_id: str | None
+    bill_number: str | None
+    customer_name: str | None
+    created_at: datetime
+
+
+class SoundboxToday(BaseModel):
+    total_sales: MoneyStr
+    upi: MoneyStr
+    cash: MoneyStr
+    udhaar: MoneyStr
+    khata_collected: MoneyStr
+    bills: int
+    entries: list[CounterSaleOut]
+    pending: CounterSaleOut | None
+    payments: list[QrPaymentOut]
+
+
+class SoundboxQr(BaseModel):
+    pay_path: str = Field(description="Path of the DEMO pay page, relative to the dashboard origin")
+    shop_name: str
+    upi_label: str
+    mode: str
+
+
+class PayPageInfo(BaseModel):
+    shop_name: str
+    locality: str
+    mode: str
+
+
+class LiveEventOut(BaseModel):
+    id: int
+    kind: str
+    title: str
+    body: str
+    announce: str | None
+    data: dict[str, Any]
+    created_at: datetime
+
+
+class LiveOut(BaseModel):
+    cursor: int
+    events: list[LiveEventOut]
+
+
+class AudioOut(BaseModel):
+    audio: str
+    mime: str = "audio/mpeg"
+    text: str

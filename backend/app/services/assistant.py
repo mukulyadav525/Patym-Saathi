@@ -40,8 +40,9 @@ def _budget(value: str) -> Decimal:
     return parse_money(value, "Budget", str(MIN_BUDGET), str(MAX_BUDGET))
 
 
-WAKE = re.compile(r"^\s*(?:(?:hey|hi|hello|ok|okay|he|hay|ae|aye|हे|हाय|ओके)[\s,]+)?(?:saathi|sathi|saathee|sathee|"
-                  r"saati|sati|साथी|साथि|सारथी)(?=[\s,.!?:।-]|$)[\s,.!:।-]*", re.I)
+WAKE = re.compile(r"^\s*(?:(?:hey|hi|hello|ok|okay|he|hay|ae|aye|हे|हाय|ओके)[\s,]+)?(?:saathi\s*ji|sathi\s*ji|saath\s+hi|"
+                  r"sath\s+hi|saathi|sathi|saathee|sathee|saathy|sathy|saati|sati|saarthi|sarthi|sarathi|साथी|साथि|सारथी|साथ\s?ही)"
+                  r"(?=[\s,.!?:।-]|$)[\s,.!:।-]*", re.I)
 
 
 def strip_wake_word(text: str) -> str:

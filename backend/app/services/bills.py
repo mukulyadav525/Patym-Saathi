@@ -20,9 +20,9 @@ ALIASES = {
     "RICE5": ("rice", "chawal", "basmati", "चावल"),
     "SUGAR1": ("sugar", "cheeni", "chini", "shakkar", "चीनी"),
     "TOOR1": ("toor", "tur", "arhar", "dal", "daal", "तूर", "दाल"),
-    "OIL1": ("sunflower", "refined", "cooking oil", "सूरजमुखी"),
-    "TEA250": ("tea", "chai", "चाय"),
-    "NOODLE12": ("noodle", "noodles", "नूडल्स"),
+    "OIL1": ("sunflower", "refined", "cooking oil", "tel", "सूरजमुखी"),
+    "TEA250": ("tea", "chai patti", "chai", "चाय"),
+    "NOODLE12": ("noodle", "noodles", "maggi", "नूडल्स"),
     "HAIROIL": ("hair oil", "coconut oil", "बालों"),
 }
 UNIT = re.compile(r"\d+(?:\.\d+)?\s*(?:kg|kgs|g|gm|gms|grams?|l|ltr|litre|liter|ml)\b", re.I)

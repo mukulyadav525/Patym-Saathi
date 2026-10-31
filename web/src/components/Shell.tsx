@@ -2,12 +2,13 @@
 
 import {
   Bell, BookOpen, Boxes, ClipboardList, History, Inbox, IndianRupee, LayoutDashboard, LogOut, Menu, Network, Receipt, ScanLine,
-  Sparkles, Tag, Wallet, X,
+  Speaker, Sparkles, Tag, Wallet, X,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 
+import { LiveToasts } from "@/components/LiveToasts";
 import { RouteBar } from "@/components/RouteBar";
 import { Button } from "@/components/ui";
 import { API_BASE, ApiError } from "@/lib/api";
@@ -20,6 +21,7 @@ const NAV = [
     group: "Paytm Saathi",
     items: [
       { href: "/inbox", label: "Task inbox", icon: Inbox },
+      { href: "/soundbox", label: "Soundbox & QR", icon: Speaker },
       { href: "/audit", label: "Activity history", icon: History },
     ],
   },
@@ -105,7 +107,7 @@ function SignIn() {
           className="mt-1 h-11 w-full rounded-xl border border-line bg-[#FAFCFE] px-3 outline-cyan" placeholder="Demo password" />
         {error && <p className="mt-3 rounded-lg bg-red-soft p-2 text-sm text-red">{error}</p>}
         <Button type="submit" loading={busy} disabled={!password} className="mt-5 w-full">Sign in</Button>
-        <p className="mt-4 text-center text-[11px] text-muted">Hackathon prototype · sample data · API {API_BASE.replace(/^https?:\/\//, "")}</p>
+        <p className="mt-4 text-center text-[11px] text-muted">Hackathon prototype · sample data · API {API_BASE ? API_BASE.replace(/^https?:\/\//, "") : "via this site"}</p>
       </form>
     </main>
   );
@@ -115,8 +117,12 @@ function Frame({ children }: { children: ReactNode }) {
   const { ready, session, signOut } = useAuth();
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  // The customer's DEMO pay page (reached by scanning the shop QR) needs no sign-in and no dashboard chrome.
+  if (path.startsWith("/pay/")) return <>{children}</>;
   if (!ready) return null;
   if (!session) return <SignIn />;
+  // The Soundbox runs full screen on a counter iPad.
+  if (path === "/soundbox") return <>{children}</>;
 
   const nav = (
     <nav className="space-y-5">
@@ -166,6 +172,7 @@ function Frame({ children }: { children: ReactNode }) {
         </div>
       </header>
       <RouteBar />
+      <LiveToasts />
       <aside className="fixed top-16 bottom-0 left-0 hidden w-64 flex-col overflow-y-auto border-r border-line bg-white py-5 pr-3 lg:flex">
         {nav}
         {session.demo_mode && (

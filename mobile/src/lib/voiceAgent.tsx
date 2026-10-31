@@ -34,7 +34,7 @@ type Agent = {
 const AgentContext = createContext<Agent | null>(null);
 
 // "hey saathi", "hi sathi", "ok saathi", "हे साथी", "साथी" ... (on-device recognizers spell it many ways)
-const WAKE = /(?:^|\s)(?:(?:hey|hi|hello|ok|okay|he|hay|aye|हे|हाय|ओके|है)[\s,]+)?(?:saathi|sathi|saathee|sathee|saati|साथी|साथि|सारथी|साथ\s?ी)(?=[\s,.!?।]|$)[\s,.!?।]*/i;
+const WAKE = /(?:^|\s)(?:(?:hey|hi|hello|ok|okay|he|hay|aye|हे|हाय|ओके|है)[\s,]+)?(?:saathi\s*ji|sathi\s*ji|saath\s+hi|sath\s+hi|saathi|sathi|saathee|sathee|saathy|sathy|saati|saarthi|sarthi|sarathi|साथी|साथि|सारथी|साथ\s?ही|साथ\s?ी)(?=[\s,.!?।]|$)[\s,.!?।]*/i;
 const AWAKE_TIMEOUT_MS = 8000;
 const SCREENS: Record<string, Href> = {
   festival: "/grow/festival", offers: "/grow/offers", khata: "/grow/khata", cashflow: "/grow/cashflow",
