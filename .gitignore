@@ -19,3 +19,6 @@ web/next-env.d.ts
 
 # Local https certificates for the Soundbox (private keys)
 certs/
+
+# Local tool config
+.claude/
